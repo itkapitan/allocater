@@ -141,46 +141,56 @@ async function initializeDb() {
       dailyCapacity REAL
     )`);
 
-    // Check if database is empty and pre-populate
-    const rows = await executeQuery('SELECT COUNT(*) as count FROM users');
-    const count = rows && rows[0] ? parseInt(rows[0].count || rows[0].COUNT || Object.values(rows[0])[0] || 0, 10) : 0;
-    
-    if (count === 0) {
-      console.log('Database empty. Seeding initial planner mock data...');
-      
-      // Seed users
+    // Check and seed users if empty
+    const userRows = await executeQuery('SELECT COUNT(*) as count FROM users');
+    const userCount = userRows && userRows[0] ? parseInt(userRows[0].count || userRows[0].COUNT || Object.values(userRows[0])[0] || 0, 10) : 0;
+    if (userCount === 0) {
+      console.log('Seeding initial users...');
       for (const u of INITIAL_USERS) {
         await executeQuery(
           'INSERT INTO users (id, name, role, avatar, isDesigner, color) VALUES (?, ?, ?, ?, ?, ?)',
           [u.id, u.name, u.role, u.avatar, u.isDesigner, u.color || null]
         );
       }
+    }
 
-      // Seed projects
+    // Check and seed projects if empty
+    const projectRows = await executeQuery('SELECT COUNT(*) as count FROM projects');
+    const projectCount = projectRows && projectRows[0] ? parseInt(projectRows[0].count || projectRows[0].COUNT || Object.values(projectRows[0])[0] || 0, 10) : 0;
+    if (projectCount === 0) {
+      console.log('Seeding initial projects...');
       for (const p of INITIAL_PROJECTS) {
         await executeQuery(
           'INSERT INTO projects (id, name, color, memberIds) VALUES (?, ?, ?, ?)',
           [p.id, p.name, p.color, p.memberIds]
         );
       }
+    }
 
-      // Seed allocations
+    // Check and seed allocations if empty
+    const allocationRows = await executeQuery('SELECT COUNT(*) as count FROM allocations');
+    const allocationCount = allocationRows && allocationRows[0] ? parseInt(allocationRows[0].count || allocationRows[0].COUNT || Object.values(allocationRows[0])[0] || 0, 10) : 0;
+    if (allocationCount === 0) {
+      console.log('Seeding initial allocations...');
       for (const a of INITIAL_ALLOCATIONS) {
         await executeQuery(
           'INSERT INTO allocations (id, projectId, designerId, startDate, endDate, hours, offsetHours) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours, a.offsetHours || 0]
         );
       }
+    }
 
-      // Seed capacities
+    // Check and seed capacities if empty
+    const capacityRows = await executeQuery('SELECT COUNT(*) as count FROM capacities');
+    const capacityCount = capacityRows && capacityRows[0] ? parseInt(capacityRows[0].count || capacityRows[0].COUNT || Object.values(capacityRows[0])[0] || 0, 10) : 0;
+    if (capacityCount === 0) {
+      console.log('Seeding initial capacities...');
       for (const c of INITIAL_CAPACITIES) {
         await executeQuery(
           'INSERT INTO capacities (designerId, dailyCapacity) VALUES (?, ?)',
           [c.designerId, c.dailyCapacity]
         );
       }
-      
-      console.log('Seeding completed successfully.');
     }
   } catch (err) {
     console.error('Error initializing database:', err);
