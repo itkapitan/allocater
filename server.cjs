@@ -1,5 +1,4 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const { put } = require('@vercel/blob');
@@ -198,6 +197,7 @@ if (isPostgres) {
   console.log('Connected to Vercel/Neon Postgres database.');
   initializeDb();
 } else {
+  const sqlite3 = require('sqlite3').verbose();
   const dbPath = path.join(__dirname, 'database.sqlite');
   db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
