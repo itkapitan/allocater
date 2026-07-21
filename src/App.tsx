@@ -57,6 +57,16 @@ export const App: React.FC = () => {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
 
+  const [isSticky, setIsSticky] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsSticky(window.scrollY > 40);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // Fetch initial data from SQLite Express Backend
   useEffect(() => {
     fetch('/api/data')
@@ -347,7 +357,20 @@ export const App: React.FC = () => {
       <div className="app-container">
         <Stack gap="lg">
           {/* Dashboard Header */}
-          <div className="glass-panel">
+          <div 
+            className={`glass-panel ${isSticky ? 'sticky-header' : ''}`}
+            style={{
+              position: 'sticky',
+              top: '12px',
+              zIndex: 1000,
+              transition: 'all 0.3s ease',
+              padding: isSticky ? '12px 20px' : '24px',
+              boxShadow: isSticky ? '0 10px 30px -10px rgba(0, 0, 0, 0.08)' : 'var(--shadow-md)',
+              background: isSticky ? 'rgba(255, 255, 255, 0.85)' : 'var(--panel-bg)',
+              backdropFilter: isSticky ? 'blur(12px)' : 'none',
+              border: isSticky ? '1px solid rgba(99, 102, 241, 0.15)' : '1px solid var(--border-color)',
+            }}
+          >
             <DesignerHeader
               users={users}
               allocations={allocations}
@@ -361,6 +384,7 @@ export const App: React.FC = () => {
               isAdmin={isAdmin}
               onLogin={handleLogin}
               onLogout={handleLogout}
+              isSticky={isSticky}
             />
           </div>
 

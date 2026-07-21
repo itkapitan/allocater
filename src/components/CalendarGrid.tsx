@@ -112,18 +112,37 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       return;
     }
 
+    e.preventDefault();
+    document.body.classList.add('is-selecting');
+
+    const gridContainer = document.querySelector('.calendar-grid-container');
+    const headerEl = document.querySelector('.project-column-header');
+    if (!gridContainer || !headerEl) return;
+
+    const gridRect = gridContainer.getBoundingClientRect();
+    const headerRect = headerEl.getBoundingClientRect();
+
+    const minX = headerRect.right;
+    const maxX = gridRect.right;
+    const minY = headerRect.bottom;
+    const maxY = gridRect.bottom;
+
+    // Clip starting point
+    const startX = Math.max(minX, Math.min(maxX, e.clientX));
+    const startY = Math.max(minY, Math.min(maxY, e.clientY));
+
     selectionStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
+      x: startX,
+      y: startY,
       projectId,
       dayIdx,
     };
 
     setSelectionBox({
-      startX: e.clientX,
-      startY: e.clientY,
-      currentX: e.clientX,
-      currentY: e.clientY,
+      startX,
+      startY,
+      currentX: startX,
+      currentY: startY,
     });
 
     // Clear previous selection on new click
@@ -132,8 +151,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const handleMouseMove = (moveEvent: MouseEvent) => {
       setSelectionBox((box) => {
         if (!box) return null;
-        const currentX = moveEvent.clientX;
-        const currentY = moveEvent.clientY;
+        
+        // Clip current point
+        const currentX = Math.max(minX, Math.min(maxX, moveEvent.clientX));
+        const currentY = Math.max(minY, Math.min(maxY, moveEvent.clientY));
 
         // Perform selection check on move
         const boxRect = {
@@ -169,15 +190,20 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const handleMouseUp = (upEvent: MouseEvent) => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      document.body.classList.remove('is-selecting');
 
       const start = selectionStartRef.current;
       if (start) {
-        const deltaX = Math.abs(upEvent.clientX - start.x);
-        const deltaY = Math.abs(upEvent.clientY - start.y);
+        // Clip up event coordinate
+        const currentX = Math.max(minX, Math.min(maxX, upEvent.clientX));
+        const currentY = Math.max(minY, Math.min(maxY, upEvent.clientY));
+
+        const deltaX = Math.abs(currentX - start.x);
+        const deltaY = Math.abs(currentY - start.y);
 
         // If it was a small click (no drag), treat as click-to-create!
         if (deltaX < 5 && deltaY < 5) {
-          handleSingleClickCreate(start.projectId, start.dayIdx);
+          handleSingleClickCreate(projectId, dayIdx);
         }
       }
 
@@ -188,6 +214,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
+
 
   const handleSingleClickCreate = (projectId: string, dayIdx: number) => {
     const project = projects.find((p) => p.id === projectId);

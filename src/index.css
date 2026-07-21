@@ -649,3 +649,28 @@ body {
   font-weight: 700;
   font-size: 20px;
 }
+
+body.is-selecting {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Compact header styling */
+.sticky-header {
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+.compact-designer-badge {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--body-bg);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.compact-designer-badge:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+}
+

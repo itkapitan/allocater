@@ -16,6 +16,7 @@ interface DesignerHeaderProps {
   isAdmin: boolean;
   onLogin: (email: string, pass: string) => Promise<boolean>;
   onLogout: () => void;
+  isSticky?: boolean;
 }
 
 export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
@@ -31,6 +32,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   isAdmin,
   onLogin,
   onLogout,
+  isSticky = false,
 }) => {
   const designers = users.filter((u) => u.isDesigner);
 
@@ -83,6 +85,244 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
       setLoginError('Невірний email або пароль');
     }
   };
+
+  if (isSticky) {
+    return (
+      <div className="compact-header-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        {/* Left Side: Month name + week arrows */}
+        <Group gap="md">
+          <Text fw={800} style={{ fontSize: '20px', fontFamily: 'var(--font-family)', color: 'var(--text-main)', margin: 0, padding: 0 }}>
+            {currentMonthYear}
+          </Text>
+          <Group gap={4}>
+            <ActionIcon variant="light" color="indigo" size="md" onClick={onPrevWeek} radius="md" title="Попередній тиждень">
+              <IconChevronLeft size={14} />
+            </ActionIcon>
+            <ActionIcon variant="light" color="indigo" size="md" onClick={onNextWeek} radius="md" title="Наступний тиждень">
+              <IconChevronRight size={14} />
+            </ActionIcon>
+          </Group>
+        </Group>
+
+        {/* Right Side: Designers list (compact) */}
+        <Group gap="lg">
+          {designers.map((designer) => {
+            const dailyCap = designerCapacities[designer.id] || 8;
+            const weeklyDaysCount = 5;
+            const totalWeeklyCap = dailyCap * weeklyDaysCount;
+
+            // Compute allocated hours
+            const dailyAllocations = days.map((day) => {
+              const dayStr = formatDateString(day);
+              const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+              
+              let hoursForDay = 0;
+              allocations
+                .filter((a) => a.designerId === designer.id)
+                .forEach((alloc) => {
+                  const start = new Date(alloc.startDate);
+                  const end = new Date(alloc.endDate);
+                  const current = new Date(dayStr);
+                  
+                  if (current >= start && current <= end) {
+                    const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    hoursForDay += alloc.hours / durationDays;
+                  }
+                });
+
+              return {
+                hours: Math.round(hoursForDay * 10) / 10,
+                isWeekend,
+              };
+            });
+
+            const totalAllocated = dailyAllocations.reduce((sum, item) => sum + (item.isWeekend ? 0 : item.hours), 0);
+            const roundedAllocated = Math.round(totalAllocated * 10) / 10;
+            const percentLoad = totalWeeklyCap > 0 ? (totalAllocated / totalWeeklyCap) * 100 : 0;
+
+            // Color classification
+            let statusColor = 'teal';
+            if (percentLoad > 100) {
+              statusColor = 'red';
+            } else if (percentLoad > 85) {
+              statusColor = 'orange';
+            } else if (percentLoad > 50) {
+              statusColor = 'indigo';
+            }
+
+            const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
+
+            return (
+              <HoverCard key={designer.id} width={320} shadow="md" withArrow openDelay={200}>
+                <HoverCard.Target>
+                  <div className="compact-designer-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <div
+                      className="designer-avatar"
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        backgroundColor: isBase64Image ? 'transparent' : getAvatarColor(designer.name),
+                        backgroundImage: isBase64Image ? `url(${designer.avatar})` : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '11px',
+                        color: '#fff',
+                        fontWeight: 700
+                      }}
+                    >
+                      {!isBase64Image && designer.avatar}
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <Text size="xs" fw={700} style={{ color: 'var(--text-main)', lineHeight: 1.1 }}>
+                        {designer.name.split(' ')[0]}
+                      </Text>
+                      <Text size="9px" c="dimmed" style={{ lineHeight: 1.1 }}>
+                        {designer.role}
+                      </Text>
+                    </div>
+
+                    <div style={{ width: '60px', marginLeft: '4px' }}>
+                      <Progress
+                        value={Math.min(100, percentLoad)}
+                        color={statusColor}
+                        size="xs"
+                        radius="xl"
+                        striped={percentLoad > 100}
+                        animated={percentLoad > 100}
+                      />
+                      <Text size="9px" fw={600} color={statusColor} style={{ textAlign: 'center', marginTop: '1px' }}>
+                        {roundedAllocated}/{totalWeeklyCap} год
+                      </Text>
+                    </div>
+                  </div>
+                </HoverCard.Target>
+
+                <HoverCard.Dropdown>
+                  <Stack gap="xs">
+                    <Text size="xs" fw={700} c="dimmed">
+                      ДЕТАЛЬНИЙ РОЗПОДІЛ (ПН-ПТ)
+                    </Text>
+                    <Table verticalSpacing="xs">
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>День</Table.Th>
+                          <Table.Th>Години</Table.Th>
+                          <Table.Th>Статус</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {days.map((day) => {
+                          const dayStr = formatDateString(day);
+                          const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                          
+                          let hoursForDay = 0;
+                          allocations
+                            .filter((a) => a.designerId === designer.id)
+                            .forEach((alloc) => {
+                              const start = new Date(alloc.startDate);
+                              const end = new Date(alloc.endDate);
+                              const current = new Date(dayStr);
+                              
+                              if (current >= start && current <= end) {
+                                const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                hoursForDay += alloc.hours / durationDays;
+                              }
+                            });
+                          const hrs = Math.round(hoursForDay * 10) / 10;
+                          const cap = isWeekend ? 0 : dailyCap;
+
+                          return (
+                            <Table.Tr key={dayStr}>
+                              <Table.Td>{getDayNameUa(day.getDay())} ({day.getDate()})</Table.Td>
+                              <Table.Td>{hrs} / {cap} год</Table.Td>
+                              <Table.Td>
+                                {isWeekend ? (
+                                  <Text size="10px" c="dimmed">Вихідний</Text>
+                                ) : hrs > cap ? (
+                                  <Text size="10px" c="red" fw={700}>Перевантаження</Text>
+                                ) : hrs === cap ? (
+                                  <Text size="10px" c="teal" fw={700}>Заповнено</Text>
+                                ) : (
+                                  <Text size="10px" c="indigo">Вільний</Text>
+                                )}
+                              </Table.Td>
+                            </Table.Tr>
+                          );
+                        })}
+                      </Table.Tbody>
+                    </Table>
+                  </Stack>
+                </HoverCard.Dropdown>
+              </HoverCard>
+            );
+          })}
+        </Group>
+
+        {/* Modal for login inside compact header as well */}
+        <Modal
+          opened={loginOpened}
+          onClose={() => {
+            setLoginOpened(false);
+            setLoginError('');
+            setEmail('');
+            setPassword('');
+          }}
+          title={
+            <Group gap="xs">
+              <IconShield size={20} color="var(--primary-color)" />
+              <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
+                Авторизація адміністратора
+              </Text>
+            </Group>
+          }
+          centered
+          radius="md"
+        >
+          <form onSubmit={handleLoginSubmit}>
+            <Stack gap="md">
+              <TextInput
+                label="Email"
+                placeholder="Введіть email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.currentTarget.value)}
+                required
+              />
+              <PasswordInput
+                label="Пароль"
+                placeholder="Введіть пароль"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                required
+              />
+
+              {loginError && (
+                <Text size="xs" c="red" fw={600}>
+                  {loginError}
+                </Text>
+              )}
+
+              <Button
+                type="submit"
+                color="indigo"
+                fullWidth
+                loading={isSubmitting}
+                leftSection={<IconLogin size={16} />}
+                mt="xs"
+              >
+                Увійти
+              </Button>
+            </Stack>
+          </form>
+        </Modal>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginBottom: '24px' }}>
