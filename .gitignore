@@ -116,3 +116,6 @@ dist/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Database file
+database.sqlite
