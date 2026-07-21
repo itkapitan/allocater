@@ -360,36 +360,38 @@ export const App: React.FC = () => {
     <MantineProvider theme={theme}>
       <div className="app-container">
         <Stack gap="lg">
-          {/* Dashboard Header */}
-          <div 
-            className={`glass-panel ${isSticky ? 'sticky-header' : ''}`}
-            style={{
-              position: 'sticky',
-              top: '12px',
-              zIndex: 90,
-              transition: 'all 0.3s ease',
-              padding: isSticky ? '12px 20px' : '24px',
-              boxShadow: isSticky ? '0 10px 30px -10px rgba(0, 0, 0, 0.08)' : 'var(--shadow-md)',
-              background: isSticky ? 'rgba(255, 255, 255, 0.85)' : 'var(--panel-bg)',
-              backdropFilter: isSticky ? 'blur(12px)' : 'none',
-              border: isSticky ? '1px solid rgba(99, 102, 241, 0.15)' : '1px solid var(--border-color)',
-            }}
-          >
-            <DesignerHeader
-              users={users}
-              allocations={allocations}
-              days={weekDays}
-              designerCapacities={designerCapacities}
-              onCapacityChange={handleCapacityChange}
-              currentMonthYear={getMonthYearLabel(weekDays)}
-              onPrevWeek={handlePrevWeek}
-              onNextWeek={handleNextWeek}
-              onOpenManageUsers={() => setDrawerOpened(true)}
-              isAdmin={isAdmin}
-              onLogin={handleLogin}
-              onLogout={handleLogout}
-              isSticky={isSticky}
-            />
+          {/* Dashboard Header Wrapper to prevent layout shift */}
+          <div style={{ minHeight: isSticky ? '210px' : 'auto' }}>
+            <div 
+              className={`glass-panel ${isSticky ? 'sticky-header' : ''}`}
+              style={{
+                position: 'sticky',
+                top: '12px',
+                zIndex: 90,
+                transition: 'all 0.3s ease',
+                padding: isSticky ? '12px 20px' : '24px',
+                boxShadow: isSticky ? '0 10px 30px -10px rgba(0, 0, 0, 0.08)' : 'var(--shadow-md)',
+                background: isSticky ? 'rgba(255, 255, 255, 0.85)' : 'var(--panel-bg)',
+                backdropFilter: isSticky ? 'blur(12px)' : 'none',
+                border: isSticky ? '1px solid rgba(99, 102, 241, 0.15)' : '1px solid var(--border-color)',
+              }}
+            >
+              <DesignerHeader
+                users={users}
+                allocations={allocations}
+                days={weekDays}
+                designerCapacities={designerCapacities}
+                onCapacityChange={handleCapacityChange}
+                currentMonthYear={getMonthYearLabel(weekDays)}
+                onPrevWeek={handlePrevWeek}
+                onNextWeek={handleNextWeek}
+                onOpenManageUsers={() => setDrawerOpened(true)}
+                isAdmin={isAdmin}
+                onLogin={handleLogin}
+                onLogout={handleLogout}
+                isSticky={isSticky}
+              />
+            </div>
           </div>
 
           {/* Interactive Planner Grid */}
