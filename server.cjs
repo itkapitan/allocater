@@ -2,22 +2,20 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const { put } = require('@vercel/blob');
+
 const app = express();
-const PORT = 5101;
+const PORT = process.env.PORT || 5101;
 
-// Support parsing large base64 avatar strings
-app.use(express.json({ limit: '10mb' }));
+// Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Open SQLite Database
-const dbPath = path.join(__dirname, 'database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening SQLite database:', err.message);
-  } else {
-    console.log('Connected to local SQLite database at:', dbPath);
-    initializeDb();
-  }
-});
+// Detect if we should use PostgreSQL (Vercel/Neon) or local SQLite
+const isPostgres = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+
+let db = null;
+let pgPool = null;
 
 // Initial mock data definitions
 const INITIAL_USERS = [
@@ -61,10 +59,47 @@ const INITIAL_CAPACITIES = [
   { designerId: "3", dailyCapacity: 8 }
 ];
 
-function initializeDb() {
-  db.serialize(() => {
+// Unified database query helper
+async function executeQuery(sql, params = []) {
+  if (isPostgres) {
+    let pgSql = sql;
+    let index = 1;
+    // Replace SQLite '?' placeholders with Postgres '$1', '$2', etc.
+    while (pgSql.includes('?')) {
+      pgSql = pgSql.replace('?', `$${index++}`);
+    }
+
+    // Special translation for ON CONFLICT SQLite syntax to Postgres syntax
+    if (pgSql.toLowerCase().includes('on conflict(designerid)')) {
+      pgSql = 'INSERT INTO capacities (designerId, dailyCapacity) VALUES ($1, $2) ON CONFLICT (designerId) DO UPDATE SET dailyCapacity = EXCLUDED.dailyCapacity';
+      // In Postgres, we only need 2 parameters: designerId and dailyCapacity
+      return (await pgPool.query(pgSql, [params[0], params[1]])).rows;
+    }
+
+    const result = await pgPool.query(pgSql, params);
+    return result.rows;
+  } else {
+    return new Promise((resolve, reject) => {
+      const isSelect = sql.trim().toUpperCase().startsWith('SELECT');
+      if (isSelect) {
+        db.all(sql, params, (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      } else {
+        db.run(sql, params, function (err) {
+          if (err) reject(err);
+          else resolve({ lastID: this.lastID, changes: this.changes });
+        });
+      }
+    });
+  }
+}
+
+async function initializeDb() {
+  try {
     // Create Tables
-    db.run(`CREATE TABLE IF NOT EXISTS users (
+    await executeQuery(`CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT,
       role TEXT,
@@ -73,17 +108,20 @@ function initializeDb() {
       color TEXT
     )`);
 
-    // Ensure color column is added to users table if table already existed
-    db.run(`ALTER TABLE users ADD COLUMN color TEXT`, () => {});
+    try {
+      await executeQuery(`ALTER TABLE users ADD COLUMN color TEXT`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
 
-    db.run(`CREATE TABLE IF NOT EXISTS projects (
+    await executeQuery(`CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT,
       color TEXT,
       memberIds TEXT
     )`);
 
-    db.run(`CREATE TABLE IF NOT EXISTS allocations (
+    await executeQuery(`CREATE TABLE IF NOT EXISTS allocations (
       id TEXT PRIMARY KEY,
       projectId TEXT,
       designerId TEXT,
@@ -93,94 +131,86 @@ function initializeDb() {
       offsetHours REAL
     )`);
 
-    // Ensure offsetHours column exists if database table already existed
-    db.run(`ALTER TABLE allocations ADD COLUMN offsetHours REAL`, () => {});
+    try {
+      await executeQuery(`ALTER TABLE allocations ADD COLUMN offsetHours REAL`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
 
-    db.run(`CREATE TABLE IF NOT EXISTS capacities (
+    await executeQuery(`CREATE TABLE IF NOT EXISTS capacities (
       designerId TEXT PRIMARY KEY,
       dailyCapacity REAL
     )`);
 
     // Check if database is empty and pre-populate
-    db.get('SELECT COUNT(*) as count FROM users', (err, row) => {
-      if (row && row.count === 0) {
-        console.log('Database empty. Seeding initial planner mock data...');
-        
-        // Seed users
-        const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)');
-        INITIAL_USERS.forEach((u) => insertUser.run(u.id, u.name, u.role, u.avatar, u.isDesigner, u.color || null));
-        insertUser.finalize();
-
-        // Seed projects
-        const insertProj = db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?)');
-        INITIAL_PROJECTS.forEach((p) => insertProj.run(p.id, p.name, p.color, p.memberIds));
-        insertProj.finalize();
-
-        // Seed allocations
-        const insertAlloc = db.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?, ?)');
-        INITIAL_ALLOCATIONS.forEach((a) => insertAlloc.run(a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours, a.offsetHours || 0));
-        insertAlloc.finalize();
-
-        // Seed capacities
-        const insertCap = db.prepare('INSERT INTO capacities VALUES (?, ?)');
-        INITIAL_CAPACITIES.forEach((c) => insertCap.run(c.designerId, c.dailyCapacity));
-        insertCap.finalize();
-        
-        console.log('Seeding completed successfully.');
+    const rows = await executeQuery('SELECT COUNT(*) as count FROM users');
+    const count = rows && rows[0] ? parseInt(rows[0].count || rows[0].COUNT || Object.values(rows[0])[0] || 0, 10) : 0;
+    
+    if (count === 0) {
+      console.log('Database empty. Seeding initial planner mock data...');
+      
+      // Seed users
+      for (const u of INITIAL_USERS) {
+        await executeQuery(
+          'INSERT INTO users (id, name, role, avatar, isDesigner, color) VALUES (?, ?, ?, ?, ?, ?)',
+          [u.id, u.name, u.role, u.avatar, u.isDesigner, u.color || null]
+        );
       }
-    });
+
+      // Seed projects
+      for (const p of INITIAL_PROJECTS) {
+        await executeQuery(
+          'INSERT INTO projects (id, name, color, memberIds) VALUES (?, ?, ?, ?)',
+          [p.id, p.name, p.color, p.memberIds]
+        );
+      }
+
+      // Seed allocations
+      for (const a of INITIAL_ALLOCATIONS) {
+        await executeQuery(
+          'INSERT INTO allocations (id, projectId, designerId, startDate, endDate, hours, offsetHours) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours, a.offsetHours || 0]
+        );
+      }
+
+      // Seed capacities
+      for (const c of INITIAL_CAPACITIES) {
+        await executeQuery(
+          'INSERT INTO capacities (designerId, dailyCapacity) VALUES (?, ?)',
+          [c.designerId, c.dailyCapacity]
+        );
+      }
+      
+      console.log('Seeding completed successfully.');
+    }
+  } catch (err) {
+    console.error('Error initializing database:', err);
+  }
+}
+
+// Database Connection
+if (isPostgres) {
+  const { Pool } = require('pg');
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  console.log('Connected to Vercel/Neon Postgres database.');
+  initializeDb();
+} else {
+  const dbPath = path.join(__dirname, 'database.sqlite');
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Error opening SQLite database:', err.message);
+    } else {
+      console.log('Connected to local SQLite database at:', dbPath);
+      initializeDb();
+    }
   });
 }
 
-// Helper to run query as promise
-const allQuery = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-};
-
-// --- API Router Endpoints ---
-
-// Get all planner data
-app.get('/api/data', async (req, res) => {
-  try {
-    const rawUsers = await allQuery('SELECT * FROM users');
-    const rawProjects = await allQuery('SELECT * FROM projects');
-    const rawAllocations = await allQuery('SELECT * FROM allocations');
-    const rawCapacities = await allQuery('SELECT * FROM capacities');
-
-    // Parse structures
-    const users = rawUsers.map((u) => ({
-      ...u,
-      isDesigner: !!u.isDesigner
-    }));
-
-    const projects = rawProjects.map((p) => ({
-      ...p,
-      memberIds: JSON.parse(p.memberIds || '[]')
-    }));
-
-    const capacities = {};
-    rawCapacities.forEach((c) => {
-      capacities[c.designerId] = c.dailyCapacity;
-    });
-
-    res.json({
-      users,
-      projects,
-      allocations: rawAllocations,
-      capacities
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Helper to save base64 avatar to files
-function saveAvatarFile(id, avatar) {
+// Helper to save base64 avatar to files or Vercel Blob
+async function saveAvatarFile(id, avatar) {
   if (avatar && avatar.startsWith('data:image/')) {
     try {
       const matches = avatar.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -194,6 +224,18 @@ function saveAvatarFile(id, avatar) {
         else if (type.includes('webp')) ext = 'webp';
         
         const filename = `${id}.${ext}`;
+
+        // If Vercel Blob is configured (production), use it
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          const blob = await put(`avatars/${filename}`, buffer, {
+            access: 'public',
+            contentType: type,
+            token: process.env.BLOB_READ_WRITE_TOKEN
+          });
+          return blob.url;
+        }
+        
+        // Otherwise save locally (development)
         const targetDir = path.join(__dirname, 'public', 'avatars');
         if (!fs.existsSync(targetDir)) {
           fs.mkdirSync(targetDir, { recursive: true });
@@ -209,190 +251,244 @@ function saveAvatarFile(id, avatar) {
   return avatar;
 }
 
-// User CRUD
-app.post('/api/users', (req, res) => {
-  const { id, name, role, avatar, isDesigner, color } = req.body;
-  const savedAvatar = saveAvatarFile(id, avatar);
-  db.run(
-    'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
-    [id, name, role, savedAvatar, isDesigner ? 1 : 0, color || null],
-    (err) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.status(201).json({ id });
-    }
-  );
-});
+// --- API Router Endpoints ---
 
-app.put('/api/users/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, role, avatar, isDesigner, color } = req.body;
-  const savedAvatar = saveAvatarFile(id, avatar);
-  db.run(
-    'UPDATE users SET name = ?, role = ?, avatar = ?, isDesigner = ?, color = ? WHERE id = ?',
-    [name, role, savedAvatar, isDesigner ? 1 : 0, color || null, id],
-    (err) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.json({ success: true });
-    }
-  );
-});
+// Get all planner data
+app.get('/api/data', async (req, res) => {
+  try {
+    const rawUsers = await executeQuery('SELECT * FROM users');
+    const rawProjects = await executeQuery('SELECT * FROM projects');
+    const rawAllocations = await executeQuery('SELECT * FROM allocations');
+    const rawCapacities = await executeQuery('SELECT * FROM capacities');
 
-app.delete('/api/users/:id', (req, res) => {
-  const { id } = req.params;
-  
-  db.serialize(() => {
-    // Delete user
-    db.run('DELETE FROM users WHERE id = ?', [id]);
-    
-    // Delete their allocations
-    db.run('DELETE FROM allocations WHERE designerId = ?', [id]);
-    
-    // Delete their capacities
-    db.run('DELETE FROM capacities WHERE designerId = ?', [id]);
+    // Parse structures
+    const users = rawUsers.map((u) => ({
+      ...u,
+      isDesigner: !!u.isdesigner || !!u.isDesigner
+    }));
 
-    // Remove user from all project members list
-    db.all('SELECT * FROM projects', (err, rows) => {
-      if (rows) {
-        rows.forEach((proj) => {
-          const list = JSON.parse(proj.memberIds || '[]');
-          if (list.includes(id)) {
-            const updatedList = list.filter((uid) => uid !== id);
-            db.run('UPDATE projects SET memberIds = ? WHERE id = ?', [JSON.stringify(updatedList), proj.id]);
-          }
-        });
-      }
+    const projects = rawProjects.map((p) => ({
+      ...p,
+      memberIds: JSON.parse(p.memberids || p.memberIds || '[]')
+    }));
+
+    const capacities = {};
+    rawCapacities.forEach((c) => {
+      capacities[c.designerid || c.designerId] = c.dailycapacity || c.dailyCapacity;
     });
 
+    res.json({
+      users,
+      projects,
+      allocations: rawAllocations.map(a => ({
+        id: a.id,
+        projectId: a.projectid || a.projectId,
+        designerId: a.designerid || a.designerId,
+        startDate: a.startdate || a.startDate,
+        endDate: a.enddate || a.endDate,
+        hours: Number(a.hours),
+        offsetHours: Number(a.offsethours || a.offsetHours || 0)
+      })),
+      capacities
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// User CRUD
+app.post('/api/users', async (req, res) => {
+  const { id, name, role, avatar, isDesigner, color } = req.body;
+  try {
+    const savedAvatar = await saveAvatarFile(id, avatar);
+    await executeQuery(
+      'INSERT INTO users (id, name, role, avatar, isDesigner, color) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, name, role, savedAvatar, isDesigner ? 1 : 0, color || null]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, role, avatar, isDesigner, color } = req.body;
+  try {
+    const savedAvatar = await saveAvatarFile(id, avatar);
+    await executeQuery(
+      'UPDATE users SET name = ?, role = ?, avatar = ?, isDesigner = ?, color = ? WHERE id = ?',
+      [name, role, savedAvatar, isDesigner ? 1 : 0, color || null, id]
+    );
     res.json({ success: true });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Delete user
+    await executeQuery('DELETE FROM users WHERE id = ?', [id]);
+    // Delete their allocations
+    await executeQuery('DELETE FROM allocations WHERE designerId = ?', [id]);
+    // Delete their capacities
+    await executeQuery('DELETE FROM capacities WHERE designerId = ?', [id]);
+
+    // Remove user from all project members list
+    const projects = await executeQuery('SELECT * FROM projects');
+    if (projects) {
+      for (const proj of projects) {
+        const memberIdsStr = proj.memberids || proj.memberIds || '[]';
+        const list = JSON.parse(memberIdsStr);
+        if (list.includes(id)) {
+          const updatedList = list.filter((uid) => uid !== id);
+          await executeQuery('UPDATE projects SET memberIds = ? WHERE id = ?', [JSON.stringify(updatedList), proj.id]);
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Project CRUD
-app.post('/api/projects', (req, res) => {
+app.post('/api/projects', async (req, res) => {
   const { id, name, color, memberIds } = req.body;
-  db.run(
-    'INSERT INTO projects VALUES (?, ?, ?, ?)',
-    [id, name, color, JSON.stringify(memberIds)],
-    (err) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.status(201).json({ id });
-    }
-  );
+  try {
+    await executeQuery(
+      'INSERT INTO projects (id, name, color, memberIds) VALUES (?, ?, ?, ?)',
+      [id, name, color, JSON.stringify(memberIds)]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/projects/:id', (req, res) => {
+app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
   const { name, color, memberIds } = req.body;
-  
-  let query = 'UPDATE projects SET ';
-  const params = [];
-  
-  if (name !== undefined) {
-    query += 'name = ?, ';
-    params.push(name);
-  }
-  if (color !== undefined) {
-    query += 'color = ?, ';
-    params.push(color);
-  }
-  if (memberIds !== undefined) {
-    query += 'memberIds = ?, ';
-    params.push(JSON.stringify(memberIds));
-  }
-  
-  query = query.slice(0, -2) + ' WHERE id = ?';
-  params.push(id);
+  try {
+    let query = 'UPDATE projects SET ';
+    const params = [];
+    
+    if (name !== undefined) {
+      query += 'name = ?, ';
+      params.push(name);
+    }
+    if (color !== undefined) {
+      query += 'color = ?, ';
+      params.push(color);
+    }
+    if (memberIds !== undefined) {
+      query += 'memberIds = ?, ';
+      params.push(JSON.stringify(memberIds));
+    }
+    
+    query = query.slice(0, -2) + ' WHERE id = ?';
+    params.push(id);
 
-  db.run(query, params, (err) => {
-    if (err) res.status(500).json({ error: err.message });
-    else res.json({ success: true });
-  });
+    await executeQuery(query, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/projects/:id', (req, res) => {
+app.delete('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
-  db.serialize(() => {
-    db.run('DELETE FROM projects WHERE id = ?', [id]);
-    db.run('DELETE FROM allocations WHERE projectId = ?', [id]);
+  try {
+    await executeQuery('DELETE FROM projects WHERE id = ?', [id]);
+    await executeQuery('DELETE FROM allocations WHERE projectId = ?', [id]);
     res.json({ success: true });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Allocations CRUD
-app.post('/api/allocations', (req, res) => {
+app.post('/api/allocations', async (req, res) => {
   const { id, projectId, designerId, startDate, endDate, hours, offsetHours } = req.body;
-  db.run(
-    'INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [id, projectId, designerId, startDate, endDate, hours, offsetHours || 0],
-    (err) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.status(201).json({ id });
-    }
-  );
+  try {
+    await executeQuery(
+      'INSERT INTO allocations (id, projectId, designerId, startDate, endDate, hours, offsetHours) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, projectId, designerId, startDate, endDate, hours, offsetHours || 0]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/allocations/:id', (req, res) => {
+app.put('/api/allocations/:id', async (req, res) => {
   const { id } = req.params;
   const { projectId, designerId, startDate, endDate, hours, offsetHours } = req.body;
+  try {
+    let query = 'UPDATE allocations SET ';
+    const params = [];
+    
+    if (projectId !== undefined) {
+      query += 'projectId = ?, ';
+      params.push(projectId);
+    }
+    if (designerId !== undefined) {
+      query += 'designerId = ?, ';
+      params.push(designerId);
+    }
+    if (startDate !== undefined) {
+      query += 'startDate = ?, ';
+      params.push(startDate);
+    }
+    if (endDate !== undefined) {
+      query += 'endDate = ?, ';
+      params.push(endDate);
+    }
+    if (hours !== undefined) {
+      query += 'hours = ?, ';
+      params.push(hours);
+    }
+    if (offsetHours !== undefined) {
+      query += 'offsetHours = ?, ';
+      params.push(offsetHours);
+    }
+    
+    query = query.slice(0, -2) + ' WHERE id = ?';
+    params.push(id);
 
-  let query = 'UPDATE allocations SET ';
-  const params = [];
-  
-  if (projectId !== undefined) {
-    query += 'projectId = ?, ';
-    params.push(projectId);
+    await executeQuery(query, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  if (designerId !== undefined) {
-    query += 'designerId = ?, ';
-    params.push(designerId);
-  }
-  if (startDate !== undefined) {
-    query += 'startDate = ?, ';
-    params.push(startDate);
-  }
-  if (endDate !== undefined) {
-    query += 'endDate = ?, ';
-    params.push(endDate);
-  }
-  if (hours !== undefined) {
-    query += 'hours = ?, ';
-    params.push(hours);
-  }
-  if (offsetHours !== undefined) {
-    query += 'offsetHours = ?, ';
-    params.push(offsetHours);
-  }
-
-  query = query.slice(0, -2) + ' WHERE id = ?';
-  params.push(id);
-
-  db.run(query, params, (err) => {
-    if (err) res.status(500).json({ error: err.message });
-    else res.json({ success: true });
-  });
 });
 
-app.delete('/api/allocations/:id', (req, res) => {
+app.delete('/api/allocations/:id', async (req, res) => {
   const { id } = req.params;
-  db.run('DELETE FROM allocations WHERE id = ?', [id], (err) => {
-    if (err) res.status(500).json({ error: err.message });
-    else res.json({ success: true });
-  });
+  try {
+    await executeQuery('DELETE FROM allocations WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Capacity Put
-app.put('/api/capacities/:id', (req, res) => {
+app.put('/api/capacities/:id', async (req, res) => {
   const { id } = req.params;
   const { dailyCapacity } = req.body;
-  
-  db.run(
-    'INSERT INTO capacities VALUES (?, ?) ON CONFLICT(designerId) DO UPDATE SET dailyCapacity = ?',
-    [id, dailyCapacity, dailyCapacity],
-    (err) => {
-      if (err) res.status(500).json({ error: err.message });
-      else res.json({ success: true });
-    }
-  );
+  try {
+    await executeQuery(
+      'INSERT INTO capacities (designerId, dailyCapacity) VALUES (?, ?) ON CONFLICT(designerId) DO UPDATE SET dailyCapacity = ?',
+      [id, dailyCapacity, dailyCapacity]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin login route
