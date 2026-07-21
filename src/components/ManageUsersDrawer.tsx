@@ -178,9 +178,16 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
           borderBottom: "1px solid var(--border-color)",
           paddingBottom: "16px",
         },
+        body: {
+          height: "calc(100vh - 70px)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          padding: "16px 20px",
+        }
       }}
     >
-      <Stack gap="md" mt="md">
+      <Stack gap="md" mt="md" style={{ flexGrow: 1, height: "100%", overflow: "hidden" }}>
         {isAdmin && (
           <>
             <Text fw={700} size="sm" c="dimmed">
@@ -280,7 +287,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
         <Stack
           gap="sm"
           style={{
-            maxHeight: isAdmin ? "calc(100vh - 440px)" : "calc(100vh - 160px)",
+            flexGrow: 1,
             overflowY: "auto",
             paddingRight: "4px",
           }}
