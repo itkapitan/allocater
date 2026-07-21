@@ -56,12 +56,16 @@ export const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
-
   const [isSticky, setIsSticky] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsSticky(window.scrollY > 40);
+      const sy = window.scrollY;
+      setIsSticky((prev) => {
+        if (!prev && sy > 140) return true;
+        if (prev && sy < 40) return false;
+        return prev;
+      });
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -362,7 +366,7 @@ export const App: React.FC = () => {
             style={{
               position: 'sticky',
               top: '12px',
-              zIndex: 1000,
+              zIndex: 90,
               transition: 'all 0.3s ease',
               padding: isSticky ? '12px 20px' : '24px',
               boxShadow: isSticky ? '0 10px 30px -10px rgba(0, 0, 0, 0.08)' : 'var(--shadow-md)',
