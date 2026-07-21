@@ -21,6 +21,7 @@ export interface Allocation {
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   hours: number; // total hours allocated for the duration
+  offsetHours?: number; // offset hours from start of startDate
 }
 
 export interface DesignerCapacity {

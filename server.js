@@ -88,8 +88,12 @@ function initializeDb() {
       designerId TEXT,
       startDate TEXT,
       endDate TEXT,
-      hours REAL
+      hours REAL,
+      offsetHours REAL
     )`);
+
+    // Ensure offsetHours column exists if database table already existed
+    db.run(`ALTER TABLE allocations ADD COLUMN offsetHours REAL`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS capacities (
       designerId TEXT PRIMARY KEY,
@@ -112,8 +116,8 @@ function initializeDb() {
         insertProj.finalize();
 
         // Seed allocations
-        const insertAlloc = db.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?)');
-        INITIAL_ALLOCATIONS.forEach((a) => insertAlloc.run(a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours));
+        const insertAlloc = db.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?, ?)');
+        INITIAL_ALLOCATIONS.forEach((a) => insertAlloc.run(a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours, a.offsetHours || 0));
         insertAlloc.finalize();
 
         // Seed capacities
@@ -283,10 +287,10 @@ app.delete('/api/projects/:id', (req, res) => {
 
 // Allocations CRUD
 app.post('/api/allocations', (req, res) => {
-  const { id, projectId, designerId, startDate, endDate, hours } = req.body;
+  const { id, projectId, designerId, startDate, endDate, hours, offsetHours } = req.body;
   db.run(
-    'INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?)',
-    [id, projectId, designerId, startDate, endDate, hours],
+    'INSERT INTO allocations VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, projectId, designerId, startDate, endDate, hours, offsetHours || 0],
     (err) => {
       if (err) res.status(500).json({ error: err.message });
       else res.status(201).json({ id });
@@ -296,7 +300,7 @@ app.post('/api/allocations', (req, res) => {
 
 app.put('/api/allocations/:id', (req, res) => {
   const { id } = req.params;
-  const { projectId, designerId, startDate, endDate, hours } = req.body;
+  const { projectId, designerId, startDate, endDate, hours, offsetHours } = req.body;
 
   let query = 'UPDATE allocations SET ';
   const params = [];
@@ -320,6 +324,10 @@ app.put('/api/allocations/:id', (req, res) => {
   if (hours !== undefined) {
     query += 'hours = ?, ';
     params.push(hours);
+  }
+  if (offsetHours !== undefined) {
+    query += 'offsetHours = ?, ';
+    params.push(offsetHours);
   }
 
   query = query.slice(0, -2) + ' WHERE id = ?';

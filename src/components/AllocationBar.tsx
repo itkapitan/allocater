@@ -78,8 +78,13 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 
   if (startIdx === -1 || endIdx === -1) return null;
 
-  // Percentage positioning
-  const leftPercent = (startIdx / 7) * 100;
+  // Real-time Visual hours scaling based on designer capacity
+  const designerId = allocation.designerId;
+  const capacity = designerCapacities[designerId] || 8;
+
+  // Percentage positioning with offsetHours support
+  const offset = allocation.offsetHours || 0;
+  const leftPercent = ((startIdx + offset / capacity) / 7) * 100;
 
   // Color Mapping
   const colorMap: Record<string, { track: string; fill: string; border: string }> = {
@@ -94,10 +99,6 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
   const designer = designers.find((d) => d.id === allocation.designerId);
   const designerColor = designer?.color || 'indigo';
   const colors = colorMap[designerColor] || colorMap.indigo;
-
-  // Real-time Visual hours scaling based on designer capacity
-  const designerId = allocation.designerId;
-  const capacity = designerCapacities[designerId] || 8;
 
   const maxWeeklyHours = 7 * capacity; // Max hours represented by the full week width
 
@@ -115,49 +116,42 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 
     const startX = e.clientX;
     const initialHours = allocation.hours;
+    const initialOffsetHours = allocation.offsetHours || 0;
     const initialStart = new Date(allocation.startDate);
-    const initialEnd = new Date(allocation.endDate);
 
     // Compute pixel width of 1 day in the grid cell
     const parentWidth = containerRef.current?.parentElement?.getBoundingClientRect().width || 0;
     const colWidth = parentWidth / 7;
     const pixelsPerHour = colWidth / capacity;
 
+    // Helper to get range of an allocation in hours relative to weekStart
+    const getAllocationHoursRange = (alloc: Allocation) => {
+      const aStart = new Date(alloc.startDate);
+      const diffDays = Math.round((aStart.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
+      const aOffset = alloc.offsetHours || 0;
+      const startHour = diffDays * capacity + aOffset;
+      return {
+        startHour,
+        endHour: startHour + alloc.hours,
+      };
+    };
+
+    const currentRange = getAllocationHoursRange(allocation);
+    const initialStartHour = currentRange.startHour;
+    const initialEndHour = currentRange.endHour;
+
     // Boundary constraints: list all allocations of this designer in this project to avoid overlapping them
     const projectAllocations = allocations.filter(
       (a) => a.projectId === project.id && a.designerId === allocation.designerId && a.id !== allocation.id
     );
-    const occupiedDayIndices = new Set<number>();
-    
-    projectAllocations.forEach((a) => {
-      const aStart = new Date(a.startDate);
-      const aEnd = new Date(a.endDate);
-      days.forEach((day, idx) => {
-        if (day >= aStart && day <= aEnd) {
-          occupiedDayIndices.add(idx);
-        }
-      });
+
+    const otherIntervals = projectAllocations.map((a) => {
+      const range = getAllocationHoursRange(a);
+      return {
+        startHour: range.startHour,
+        endHour: range.endHour,
+      };
     });
-
-    // Find nearest left/right busy boundaries relative to current range
-    const originalStartIdx = findDayIndex(allocStart);
-    const originalEndIdx = findDayIndex(allocEnd);
-
-    let leftBoundaryIdx = -1;
-    for (let i = originalStartIdx - 1; i >= 0; i--) {
-      if (occupiedDayIndices.has(i)) {
-        leftBoundaryIdx = i;
-        break;
-      }
-    }
-
-    let rightBoundaryIdx = 7;
-    for (let i = originalEndIdx + 1; i < 7; i++) {
-      if (occupiedDayIndices.has(i)) {
-        rightBoundaryIdx = i;
-        break;
-      }
-    }
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
@@ -165,12 +159,14 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
       if (mode === 'resize-right') {
         const deltaHours = Math.round(deltaX / pixelsPerHour);
         const newHours = Math.max(1, initialHours + deltaHours);
+        const newEndHour = initialStartHour + newHours;
 
-        // Convert new hours back to days duration
-        const durationDays = Math.ceil(newHours / capacity);
-        const targetEndIdx = originalStartIdx + durationDays - 1;
+        const rightLimit = otherIntervals
+          .filter((interval) => interval.startHour >= initialEndHour)
+          .reduce((min, interval) => Math.min(min, interval.startHour), Infinity);
 
-        if (targetEndIdx >= originalStartIdx && targetEndIdx < rightBoundaryIdx) {
+        if (newEndHour <= rightLimit) {
+          const durationDays = Math.ceil((initialOffsetHours + newHours) / capacity);
           const newEnd = new Date(initialStart);
           newEnd.setDate(initialStart.getDate() + durationDays - 1);
           
@@ -182,39 +178,61 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
       } 
       else if (mode === 'resize-left') {
         const deltaHours = Math.round(deltaX / pixelsPerHour);
-        const newHours = Math.max(1, initialHours - deltaHours);
+        const newStartHour = initialStartHour + deltaHours;
+        const newHours = initialHours - deltaHours;
 
-        // Convert to days duration
-        const durationDays = Math.ceil(newHours / capacity);
-        const targetStartIdx = originalEndIdx - durationDays + 1;
+        const leftLimit = otherIntervals
+          .filter((interval) => interval.endHour <= initialStartHour)
+          .reduce((max, interval) => Math.max(max, interval.endHour), -Infinity);
 
-        if (targetStartIdx <= originalEndIdx && targetStartIdx > leftBoundaryIdx) {
-          const newStart = new Date(initialEnd);
-          newStart.setDate(initialEnd.getDate() - durationDays + 1);
-          
+        if (newHours >= 1 && newStartHour >= leftLimit) {
+          let totalOffsetDays = Math.floor(newStartHour / capacity);
+          let newOffsetHours = newStartHour % capacity;
+          if (newOffsetHours < 0) {
+            newOffsetHours += capacity;
+          }
+
+          const newStart = new Date(weekStart);
+          newStart.setDate(weekStart.getDate() + totalOffsetDays);
+
           onUpdateAllocation(allocation.id, {
             startDate: formatDateString(newStart),
+            offsetHours: newOffsetHours,
             hours: newHours,
           });
         }
       } 
       else if (mode === 'move') {
-        const deltaDays = Math.round(deltaX / colWidth);
-        const durationDays = Math.round((initialEnd.getTime() - initialStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const deltaHours = Math.round(deltaX / pixelsPerHour);
+        const newStartHour = initialStartHour + deltaHours;
+        const newEndHour = initialEndHour + deltaHours;
 
-        const targetStartIdx = originalStartIdx + deltaDays;
-        const targetEndIdx = targetStartIdx + durationDays - 1;
+        const leftLimit = otherIntervals
+          .filter((interval) => interval.endHour <= initialStartHour)
+          .reduce((max, interval) => Math.max(max, interval.endHour), -Infinity);
 
-        if (targetStartIdx > leftBoundaryIdx && targetEndIdx < rightBoundaryIdx) {
-          const newStart = new Date(initialStart);
-          newStart.setDate(initialStart.getDate() + deltaDays);
-          
+        const rightLimit = otherIntervals
+          .filter((interval) => interval.startHour >= initialEndHour)
+          .reduce((min, interval) => Math.min(min, interval.startHour), Infinity);
+
+        if (newStartHour >= leftLimit && newEndHour <= rightLimit) {
+          let totalOffsetDays = Math.floor(newStartHour / capacity);
+          let newOffsetHours = newStartHour % capacity;
+          if (newOffsetHours < 0) {
+            newOffsetHours += capacity;
+          }
+
+          const newStart = new Date(weekStart);
+          newStart.setDate(weekStart.getDate() + totalOffsetDays);
+
+          const durationDays = Math.ceil((newOffsetHours + initialHours) / capacity);
           const newEnd = new Date(newStart);
           newEnd.setDate(newStart.getDate() + durationDays - 1);
 
           onUpdateAllocation(allocation.id, {
             startDate: formatDateString(newStart),
             endDate: formatDateString(newEnd),
+            offsetHours: newOffsetHours,
           });
         }
       }
