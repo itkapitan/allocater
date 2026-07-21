@@ -348,6 +348,42 @@ body {
   box-shadow: var(--shadow-md);
 }
 
+.allocation-capsule.is-selected {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(79, 70, 229, 0.45);
+}
+
+.selection-actions-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-bg);
+  border: 1px solid #fee2e2;
+  box-shadow: var(--shadow-lg), 0 4px 20px rgba(239, 68, 68, 0.15);
+  padding: 10px 20px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1000;
+  font-weight: 600;
+  font-size: 13px;
+  animation: selectionBarSlideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes selectionBarSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .allocation-progress-track {
   position: absolute;
   top: 0;

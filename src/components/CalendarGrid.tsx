@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar } from '@mantine/core';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical, IconExchange } from '@tabler/icons-react';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
@@ -62,13 +62,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onDeleteAllocation,
   isAdmin,
 }) => {
-  // Drag creation state
-  const [dragStartIdx, setDragStartIdx] = useState<number | null>(null);
-  const [dragCurrentIdx, setDragCurrentIdx] = useState<number | null>(null);
-  const [activeDragProjectId, setActiveDragProjectId] = useState<string | null>(null);
+  // Drag selection state
+  const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
+  const [deleteModalOpened, setDeleteModalOpened] = useState(false);
 
-  const dragStartIdxRef = useRef<number | null>(null);
-  const dragCurrentIdxRef = useRef<number | null>(null);
+  const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
 
   // Formatter helper
   const formatDateString = (date: Date) => {
@@ -102,144 +101,165 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return () => clearInterval(interval);
   }, [days]);
 
-  // Handle Drag to Create Allocation
-  const handleCellMouseDown = (projectId: string, dayIdx: number) => {
-    if (!isAdmin) return; // Read-only mode
+  // Handle drag-selection and click-to-create
+  const handleCellMouseDown = (e: React.MouseEvent, projectId: string, dayIdx: number) => {
+    // If it's a right click or not admin, ignore
+    if (e.button !== 0 || !isAdmin) return;
 
-    const project = projects.find((p) => p.id === projectId);
-    if (!project) return;
-    const projectDesigners = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
-    if (projectDesigners.length === 0) return;
-
-    // Check which designers are occupied on this specific dayIdx
-    const targetDay = days[dayIdx];
-    const occupiedDesigners = new Set<string>();
-    allocations
-      .filter((a) => a.projectId === projectId)
-      .forEach((alloc) => {
-        const start = new Date(alloc.startDate);
-        const end = new Date(alloc.endDate);
-        if (targetDay >= start && targetDay <= end) {
-          occupiedDesigners.add(alloc.designerId);
-        }
-      });
-
-    // If all designers of this project are occupied on this day, block creation
-    if (occupiedDesigners.size >= projectDesigners.length) {
+    // Check if target is a capsule or handle (should not start selection box here)
+    const target = e.target as HTMLElement;
+    if (target.closest('.allocation-capsule') || target.closest('.mantine-Popover-dropdown')) {
       return;
     }
 
-    dragStartIdxRef.current = dayIdx;
-    dragCurrentIdxRef.current = dayIdx;
-    setDragStartIdx(dayIdx);
-    setDragCurrentIdx(dayIdx);
-    setActiveDragProjectId(projectId);
+    selectionStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      projectId,
+      dayIdx,
+    };
 
-    const handleMouseUp = () => {
-      const start = dragStartIdxRef.current;
-      const current = dragCurrentIdxRef.current;
+    setSelectionBox({
+      startX: e.clientX,
+      startY: e.clientY,
+      currentX: e.clientX,
+      currentY: e.clientY,
+    });
 
-      if (start !== null && current !== null) {
-        const minIdx = Math.min(start, current);
-        const maxIdx = Math.max(start, current);
-        
-        const startDateStr = formatDateString(days[minIdx]);
-        const endDateStr = formatDateString(days[maxIdx]);
-        const startDateObj = new Date(startDateStr);
-        const endDateObj = new Date(endDateStr);
+    // Clear previous selection on new click
+    setSelectedAllocationIds([]);
 
-        // Find all designers in the project
-        const designers = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      setSelectionBox((box) => {
+        if (!box) return null;
+        const currentX = moveEvent.clientX;
+        const currentY = moveEvent.clientY;
 
-        // Find which designers are occupied in this range
-        const occupiedInNewRange = new Set<string>();
-        allocations
-          .filter((a) => a.projectId === projectId)
-          .forEach((alloc) => {
-            const aStart = new Date(alloc.startDate);
-            const aEnd = new Date(alloc.endDate);
-            if (!(endDateObj < aStart || startDateObj > aEnd)) {
-              occupiedInNewRange.add(alloc.designerId);
+        // Perform selection check on move
+        const boxRect = {
+          left: Math.min(box.startX, currentX),
+          top: Math.min(box.startY, currentY),
+          right: Math.max(box.startX, currentX),
+          bottom: Math.max(box.startY, currentY),
+        };
+
+        const selectedIds: string[] = [];
+        const capsules = document.querySelectorAll('.allocation-capsule');
+        capsules.forEach((capsule) => {
+          const id = capsule.getAttribute('data-allocation-id');
+          if (id) {
+            const rect = capsule.getBoundingClientRect();
+            const intersects = !(
+              rect.right < boxRect.left ||
+              rect.left > boxRect.right ||
+              rect.bottom < boxRect.top ||
+              rect.top > boxRect.bottom
+            );
+            if (intersects) {
+              selectedIds.push(id);
             }
-          });
+          }
+        });
+        setSelectedAllocationIds(selectedIds);
 
-        // Find first designer who is NOT occupied
-        let targetDesigner = designers.find((d) => !occupiedInNewRange.has(d.id));
-        if (!targetDesigner) {
-          targetDesigner = designers[0]; // fallback
-        }
+        return { ...box, currentX, currentY };
+      });
+    };
 
-        if (targetDesigner) {
-          const capacity = designerCapacities[targetDesigner.id] || 8;
-          const durationDays = maxIdx - minIdx + 1;
-          const totalHours = durationDays * capacity;
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
 
-          onAddAllocation({
-            projectId,
-            designerId: targetDesigner.id,
-            startDate: startDateStr,
-            endDate: endDateStr,
-            hours: totalHours,
-          });
+      const start = selectionStartRef.current;
+      if (start) {
+        const deltaX = Math.abs(upEvent.clientX - start.x);
+        const deltaY = Math.abs(upEvent.clientY - start.y);
+
+        // If it was a small click (no drag), treat as click-to-create!
+        if (deltaX < 5 && deltaY < 5) {
+          handleSingleClickCreate(start.projectId, start.dayIdx);
         }
       }
 
-      dragStartIdxRef.current = null;
-      dragCurrentIdxRef.current = null;
-      setDragStartIdx(null);
-      setDragCurrentIdx(null);
-      setActiveDragProjectId(null);
-      window.removeEventListener('mouseup', handleMouseUp);
+      setSelectionBox(null);
+      selectionStartRef.current = null;
     };
 
+    window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleCellMouseEnter = (projectId: string, dayIdx: number) => {
-    if (!isAdmin) return;
-    if (activeDragProjectId === projectId && dragStartIdx !== null) {
-      const project = projects.find((p) => p.id === projectId);
-      const projectDesigners = users.filter((u) => u.isDesigner && project?.memberIds.includes(u.id));
-      
-      const occupied = new Set<number>();
-      if (projectDesigners.length > 0) {
-        days.forEach((day, index) => {
-          const occupiedDesigners = new Set<string>();
-          allocations
-            .filter((a) => a.projectId === projectId)
-            .forEach((alloc) => {
-              const start = new Date(alloc.startDate);
-              const end = new Date(alloc.endDate);
-              if (day >= start && day <= end) {
-                occupiedDesigners.add(alloc.designerId);
-              }
-            });
-          if (occupiedDesigners.size >= projectDesigners.length) {
-            occupied.add(index);
-          }
-        });
-      }
+  const handleSingleClickCreate = (projectId: string, dayIdx: number) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const designers = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
+    if (designers.length === 0) return;
 
-      // Clamp target index so drag selection cannot span across occupied cells
-      let targetIdx = dayIdx;
-      if (dayIdx > dragStartIdx) {
-        for (let i = dragStartIdx + 1; i <= dayIdx; i++) {
-          if (occupied.has(i)) {
-            targetIdx = i - 1;
-            break;
-          }
+    const startDateStr = formatDateString(days[dayIdx]);
+    const endDateStr = formatDateString(days[dayIdx]); // 1 day duration
+    const startDateObj = new Date(startDateStr);
+    const endDateObj = new Date(endDateStr);
+
+    // Find which designers are occupied on this day
+    const occupiedOnDay = new Set<string>();
+    allocations
+      .filter((a) => a.projectId === projectId)
+      .forEach((alloc) => {
+        const aStart = new Date(alloc.startDate);
+        const aEnd = new Date(alloc.endDate);
+        if (!(endDateObj < aStart || startDateObj > aEnd)) {
+          occupiedOnDay.add(alloc.designerId);
         }
-      } else if (dayIdx < dragStartIdx) {
-        for (let i = dragStartIdx - 1; i >= dayIdx; i--) {
-          if (occupied.has(i)) {
-            targetIdx = i + 1;
-            break;
-          }
-        }
-      }
-      dragCurrentIdxRef.current = targetIdx;
-      setDragCurrentIdx(targetIdx);
+      });
+
+    // Find first designer who is NOT occupied
+    let targetDesigner = designers.find((d) => !occupiedOnDay.has(d.id));
+    // If all are occupied, fallback to first
+    if (!targetDesigner) {
+      targetDesigner = designers[0];
     }
+
+    if (targetDesigner) {
+      const capacity = designerCapacities[targetDesigner.id] || 8;
+      onAddAllocation({
+        projectId,
+        designerId: targetDesigner.id,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        hours: capacity, // 1 day capacity
+      });
+    }
+  };
+
+  // Keyboard shortcut listener for deletion and deselect
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAllocationIds.length > 0) {
+        const activeEl = document.activeElement;
+        if (
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.hasAttribute('contenteditable'))
+        ) {
+          return;
+        }
+        setDeleteModalOpened(true);
+      }
+      if (e.key === 'Escape') {
+        setSelectedAllocationIds([]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedAllocationIds]);
+
+  const handleConfirmDelete = () => {
+    selectedAllocationIds.forEach((id) => {
+      onDeleteAllocation(id);
+    });
+    setSelectedAllocationIds([]);
+    setDeleteModalOpened(false);
   };
 
   // Helper to format short date label (e.g. "20.07")
@@ -470,37 +490,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             >
               {days.map((day, idx) => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                
-                let isDraggingOver = false;
-                if (
-                  activeDragProjectId === project.id &&
-                  dragStartIdx !== null &&
-                  dragCurrentIdx !== null
-                ) {
-                  const min = Math.min(dragStartIdx, dragCurrentIdx);
-                  const max = Math.max(dragStartIdx, dragCurrentIdx);
-                  isDraggingOver = idx >= min && idx <= max;
-                }
-
-                const colorConfigMap: Record<string, string> = {
-                  indigo: 'rgba(99, 102, 241, 0.08)',
-                  blue: 'rgba(59, 130, 246, 0.08)',
-                  teal: 'rgba(13, 148, 136, 0.08)',
-                  emerald: 'rgba(16, 185, 129, 0.08)',
-                  orange: 'rgba(245, 158, 11, 0.08)',
-                  rose: 'rgba(244, 63, 94, 0.08)',
-                };
-
                 return (
                   <div
                     key={day.toISOString()}
                     className={`day-grid-column ${isWeekend ? 'is-weekend' : ''}`}
-                    onMouseDown={() => handleCellMouseDown(project.id, idx)}
-                    onMouseEnter={() => handleCellMouseEnter(project.id, idx)}
+                    onMouseDown={(e) => handleCellMouseDown(e, project.id, idx)}
                     style={{
-                      backgroundColor: isDraggingOver
-                        ? colorConfigMap[projectDesigners[0]?.color || 'indigo'] || colorConfigMap.indigo
-                        : undefined,
                       cursor: isAdmin ? 'crosshair' : 'default',
                     }}
                   />
@@ -523,6 +518,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         onUpdateAllocation={onUpdateAllocation}
                         onDeleteAllocation={onDeleteAllocation}
                         isAdmin={isAdmin}
+                        isSelected={selectedAllocationIds.includes(allocation.id)}
                       />
                     ))}
                   </div>
@@ -532,6 +528,70 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           </div>
         );
       })}
+
+      {/* Floating Selection Box */}
+      {selectionBox && (
+        <div
+          className="selection-box"
+          style={{
+            position: 'fixed',
+            left: Math.min(selectionBox.startX, selectionBox.currentX),
+            top: Math.min(selectionBox.startY, selectionBox.currentY),
+            width: Math.abs(selectionBox.startX - selectionBox.currentX),
+            height: Math.abs(selectionBox.startY - selectionBox.currentY),
+            border: '1px dashed #6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            borderRadius: '4px',
+          }}
+        />
+      )}
+
+      {/* Floating Selection Actions Bar */}
+      {selectedAllocationIds.length > 0 && (
+        <div className="selection-actions-bar">
+          <Text size="sm" fw={600}>Вибрано елементів: {selectedAllocationIds.length}</Text>
+          <Group gap="xs">
+            <Button
+              color="red"
+              size="xs"
+              leftSection={<IconTrash size={14} />}
+              onClick={() => setDeleteModalOpened(true)}
+            >
+              Видалити
+            </Button>
+            <Button
+              variant="subtle"
+              color="gray"
+              size="xs"
+              onClick={() => setSelectedAllocationIds([])}
+            >
+              Скасувати
+            </Button>
+          </Group>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={() => setDeleteModalOpened(false)}
+        title="Підтвердження видалення"
+        centered
+      >
+        <Stack>
+          <Text size="sm">Ви впевнені, що хочете видалити {selectedAllocationIds.length} вибраних прогресс-барів?</Text>
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" color="gray" onClick={() => setDeleteModalOpened(false)}>
+              Скасувати
+            </Button>
+            <Button color="red" onClick={handleConfirmDelete}>
+              Видалити
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   );
 };

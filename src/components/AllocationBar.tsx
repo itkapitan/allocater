@@ -22,6 +22,7 @@ interface AllocationBarProps {
   onUpdateAllocation: (id: string, updated: Partial<Allocation>) => void;
   onDeleteAllocation: (id: string) => void;
   isAdmin: boolean;
+  isSelected: boolean;
 }
 
 export const AllocationBar: React.FC<AllocationBarProps> = ({
@@ -34,6 +35,7 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
   onUpdateAllocation,
   onDeleteAllocation,
   isAdmin,
+  isSelected,
 }) => {
   const [popoverOpened, setPopoverOpened] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -247,65 +249,78 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  const wasDraggedRef = useRef(false);
+
   return (
     <div ref={containerRef}>
-      <Popover
-        opened={isAdmin && popoverOpened}
-        onChange={setPopoverOpened}
-        width={260}
-        position="bottom"
-        withArrow
-        shadow="md"
-        trapFocus
+      <div
+        className={`allocation-capsule ${isSelected ? 'is-selected' : ''}`}
+        data-allocation-id={allocation.id}
+        style={{
+          left: `${leftPercent}%`,
+          width: `calc(max(36px, ${widthPercent}% - 4px))`, // Minimum clickable/readable width of 36px
+          backgroundColor: colors.track,
+          border: `2px solid ${colors.border}`,
+          margin: '0 2px',
+          position: 'absolute',
+          overflow: 'visible', // Let handles remain accessible
+          cursor: isAdmin ? 'grab' : 'default',
+        }}
       >
-        <Popover.Target>
+        {/* Visual Progress Fill Bar */}
+        <div
+          className="allocation-progress-fill"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+            backgroundColor: colors.fill,
+            opacity: 0.85,
+            zIndex: 1,
+            borderRadius: 'inherit',
+          }}
+        />
+
+        {/* Left Resize Handle */}
+        {isAdmin && (
           <div
-            className="allocation-capsule"
-            style={{
-              left: `${leftPercent}%`,
-              width: `calc(max(36px, ${widthPercent}% - 4px))`, // Minimum clickable/readable width of 36px
-              backgroundColor: colors.track,
-              border: `2px solid ${colors.border}`,
-              margin: '0 2px',
-              position: 'absolute',
-              overflow: 'visible', // Let handles remain accessible
-              cursor: isAdmin ? 'grab' : 'default',
-            }}
-            onClick={isAdmin ? () => setPopoverOpened((o) => !o) : undefined}
+            className="allocation-handle allocation-handle-left"
+            style={{ backgroundColor: colors.fill, cursor: 'ew-resize' }}
+            onMouseDown={(e) => handleDragStart(e, 'resize-left')}
+          />
+        )}
+
+        {/* Drag middle to move */}
+        <div
+          className="allocation-content"
+          onMouseDown={isAdmin ? (e) => {
+            wasDraggedRef.current = false;
+            handleDragStart(e, 'move');
+          } : undefined}
+          style={{ position: 'relative', zIndex: 2 }}
+        >
+          <Popover
+            opened={isAdmin && popoverOpened}
+            onChange={setPopoverOpened}
+            width={260}
+            position="bottom"
+            withArrow
+            shadow="md"
+            trapFocus
           >
-            {/* Visual Progress Fill Bar */}
-            <div
-              className="allocation-progress-fill"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-                backgroundColor: colors.fill,
-                opacity: 0.85,
-                zIndex: 1,
-                borderRadius: 'inherit',
-              }}
-            />
-
-            {/* Left Resize Handle */}
-            {isAdmin && (
-              <div
-                className="allocation-handle allocation-handle-left"
-                style={{ backgroundColor: colors.fill, cursor: 'ew-resize' }}
-                onMouseDown={(e) => handleDragStart(e, 'resize-left')}
-              />
-            )}
-
-            {/* Drag middle to move */}
-            <div
-              className="allocation-content"
-              onMouseDown={isAdmin ? (e) => handleDragStart(e, 'move') : undefined}
-              style={{ position: 'relative', zIndex: 2 }}
-            >
+            <Popover.Target>
               {/* Floating Pill Badge for maximum legibility */}
               <div
+                onClick={isAdmin ? (e) => {
+                  e.stopPropagation();
+                  if (wasDraggedRef.current) {
+                    wasDraggedRef.current = false;
+                    return;
+                  }
+                  setPopoverOpened((o) => !o);
+                } : undefined}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -319,6 +334,8 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                   fontSize: '11px',
                   fontWeight: 800,
                   whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  zIndex: 10,
                 }}
               >
                 {(() => {
@@ -349,59 +366,59 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                 })()}
                 <span>{allocation.hours} г</span>
               </div>
-            </div>
+            </Popover.Target>
 
-            {/* Right Resize Handle */}
-            {isAdmin && (
-              <div
-                className="allocation-handle allocation-handle-right"
-                style={{ backgroundColor: colors.fill, cursor: 'ew-resize' }}
-                onMouseDown={(e) => handleDragStart(e, 'resize-right')}
-              />
-            )}
-          </div>
-        </Popover.Target>
+            <Popover.Dropdown onClick={(e) => e.stopPropagation()}>
+              <Stack gap="sm">
+                <Text fw={700} size="sm" style={{ fontFamily: 'var(--font-family)' }}>Редагувати години</Text>
+                
+                <NumberInput
+                  label="Заплановано годин"
+                  value={allocation.hours}
+                  onChange={(val) => onUpdateAllocation(allocation.id, { hours: Number(val) || 0 })}
+                  min={1}
+                  max={168}
+                  required
+                />
 
-        <Popover.Dropdown onClick={(e) => e.stopPropagation()}>
-          <Stack gap="sm">
-            <Text fw={700} size="sm" style={{ fontFamily: 'var(--font-family)' }}>Редагувати години</Text>
-            
-            <NumberInput
-              label="Заплановано годин"
-              value={allocation.hours}
-              onChange={(val) => onUpdateAllocation(allocation.id, { hours: Number(val) || 0 })}
-              min={1}
-              max={168}
-              required
-            />
+                <Select
+                  label="Виконавець (Дизайнер)"
+                  value={allocation.designerId}
+                  data={designers.map((d) => ({ value: d.id, label: d.name }))}
+                  onChange={(val) => val && onUpdateAllocation(allocation.id, { designerId: val })}
+                />
 
-            <Select
-              label="Виконавець (Дизайнер)"
-              value={allocation.designerId}
-              data={designers.map((d) => ({ value: d.id, label: d.name }))}
-              onChange={(val) => val && onUpdateAllocation(allocation.id, { designerId: val })}
-            />
+                <Group justify="space-between" mt="xs">
+                  <Button
+                    color="red"
+                    variant="light"
+                    leftSection={<IconTrash size={14} />}
+                    onClick={() => {
+                      onDeleteAllocation(allocation.id);
+                      setPopoverOpened(false);
+                    }}
+                    size="xs"
+                  >
+                    Видалити
+                  </Button>
+                  <Button size="xs" color="indigo" onClick={() => setPopoverOpened(false)}>
+                    Зберегти
+                  </Button>
+                </Group>
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
+        </div>
 
-            <Group justify="space-between" mt="xs">
-              <Button
-                color="red"
-                variant="light"
-                leftSection={<IconTrash size={14} />}
-                onClick={() => {
-                  onDeleteAllocation(allocation.id);
-                  setPopoverOpened(false);
-                }}
-                size="xs"
-              >
-                Видалити
-              </Button>
-              <Button size="xs" color="indigo" onClick={() => setPopoverOpened(false)}>
-                Зберегти
-              </Button>
-            </Group>
-          </Stack>
-        </Popover.Dropdown>
-      </Popover>
+        {/* Right Resize Handle */}
+        {isAdmin && (
+          <div
+            className="allocation-handle allocation-handle-right"
+            style={{ backgroundColor: colors.fill, cursor: 'ew-resize' }}
+            onMouseDown={(e) => handleDragStart(e, 'resize-right')}
+          />
+        )}
+      </div>
     </div>
   );
 };
