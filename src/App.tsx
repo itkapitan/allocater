@@ -360,27 +360,46 @@ export const App: React.FC = () => {
     <MantineProvider theme={theme}>
       <div className="app-container">
         <Stack gap="lg">
-          {/* Spacer to prevent layout shift when header becomes sticky/fixed */}
-          {isSticky && <div style={{ height: '210px' }} />}
+          {/* Compact Sticky Header (Fixed overlay shown only when scrolled down) */}
+          {isSticky && (
+            <div 
+              className="glass-panel sticky-header"
+              style={{
+                position: 'fixed',
+                top: '12px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: 'calc(100% - 48px)',
+                maxWidth: '1552px',
+                zIndex: 90,
+                padding: '12px 20px',
+                boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.08)',
+                background: 'rgba(255, 255, 255, 0.85)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(99, 102, 241, 0.15)',
+                animation: 'stickySlideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+              }}
+            >
+              <DesignerHeader
+                users={users}
+                allocations={allocations}
+                days={weekDays}
+                designerCapacities={designerCapacities}
+                onCapacityChange={handleCapacityChange}
+                currentMonthYear={getMonthYearLabel(weekDays)}
+                onPrevWeek={handlePrevWeek}
+                onNextWeek={handleNextWeek}
+                onOpenManageUsers={() => setDrawerOpened(true)}
+                isAdmin={isAdmin}
+                onLogin={handleLogin}
+                onLogout={handleLogout}
+                isSticky={true}
+              />
+            </div>
+          )}
 
-          <div 
-            className={`glass-panel ${isSticky ? 'sticky-header' : ''}`}
-            style={{
-              position: isSticky ? 'fixed' : 'relative',
-              top: isSticky ? '12px' : 'auto',
-              left: isSticky ? '50%' : 'auto',
-              transform: isSticky ? 'translateX(-50%)' : 'none',
-              width: isSticky ? 'calc(100% - 48px)' : 'auto',
-              maxWidth: isSticky ? '1552px' : 'none',
-              zIndex: 90,
-              transition: 'padding 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
-              padding: isSticky ? '12px 20px' : '24px',
-              boxShadow: isSticky ? '0 10px 30px -10px rgba(0, 0, 0, 0.08)' : 'var(--shadow-md)',
-              background: isSticky ? 'rgba(255, 255, 255, 0.85)' : 'var(--panel-bg)',
-              backdropFilter: isSticky ? 'blur(12px)' : 'none',
-              border: isSticky ? '1px solid rgba(99, 102, 241, 0.15)' : '1px solid var(--border-color)',
-            }}
-          >
+          {/* Normal Dashboard Header (Always static in the document flow) */}
+          <div className="glass-panel">
             <DesignerHeader
               users={users}
               allocations={allocations}
@@ -394,7 +413,7 @@ export const App: React.FC = () => {
               isAdmin={isAdmin}
               onLogin={handleLogin}
               onLogout={handleLogout}
-              isSticky={isSticky}
+              isSticky={false}
             />
           </div>
 

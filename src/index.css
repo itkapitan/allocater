@@ -674,3 +674,14 @@ body.is-selecting {
   transform: translateY(-1px);
 }
 
+@keyframes stickySlideDown {
+  from {
+    transform: translate(-50%, -20px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
