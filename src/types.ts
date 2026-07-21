@@ -4,6 +4,7 @@ export interface User {
   role: string;
   avatar: string; // URL or initials or emoji placeholder
   isDesigner: boolean;
+  color?: string; // CSS or Mantine theme color for timeline
 }
 
 export interface Project {

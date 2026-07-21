@@ -1,7 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { Popover, NumberInput, Select, Button, Group, Stack, Text } from '@mantine/core';
-import { IconTrash, IconClock } from '@tabler/icons-react';
+import { IconTrash } from '@tabler/icons-react';
 import type { Allocation, Project, User } from '../types';
+
+const getAvatarColor = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 60%, 45%)`;
+};
 
 interface AllocationBarProps {
   allocation: Allocation;
@@ -82,7 +91,9 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     rose: { track: 'rgba(244, 63, 94, 0.08)', fill: '#f43f5e', border: '#fb7185' },
   };
 
-  const colors = colorMap[project.color] || colorMap.indigo;
+  const designer = designers.find((d) => d.id === allocation.designerId);
+  const designerColor = designer?.color || 'indigo';
+  const colors = colorMap[designerColor] || colorMap.indigo;
 
   // Real-time Visual hours scaling based on designer capacity
   const designerId = allocation.designerId;
@@ -112,8 +123,10 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     const colWidth = parentWidth / 7;
     const pixelsPerHour = colWidth / capacity;
 
-    // Boundary constraints: list all allocations of this project to avoid overlapping them
-    const projectAllocations = allocations.filter((a) => a.projectId === project.id && a.id !== allocation.id);
+    // Boundary constraints: list all allocations of this designer in this project to avoid overlapping them
+    const projectAllocations = allocations.filter(
+      (a) => a.projectId === project.id && a.designerId === allocation.designerId && a.id !== allocation.id
+    );
     const occupiedDayIndices = new Set<number>();
     
     projectAllocations.forEach((a) => {
@@ -278,11 +291,11 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px',
+                  gap: '6px',
                   backgroundColor: '#ffffff',
                   color: colors.fill,
-                  padding: '3px 8px',
-                  borderRadius: '10px',
+                  padding: '3px 8px 3px 4px',
+                  borderRadius: '12px',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
                   border: `1px solid ${colors.border}`,
                   fontSize: '11px',
@@ -290,7 +303,32 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                   whiteSpace: 'nowrap',
                 }}
               >
-                <IconClock size={12} style={{ color: colors.fill }} />
+                {(() => {
+                  if (!designer) return null;
+                  const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http'));
+                  return (
+                    <div
+                      style={{
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        backgroundColor: isBase64Image ? 'transparent' : getAvatarColor(designer.name),
+                        backgroundImage: isBase64Image ? `url(${designer.avatar})` : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '7px',
+                        fontWeight: 800,
+                        color: '#ffffff',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {!isBase64Image && designer.avatar}
+                    </div>
+                  );
+                })()}
                 <span>{allocation.hours} г</span>
               </div>
             </div>

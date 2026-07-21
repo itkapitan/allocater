@@ -20,9 +20,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Initial mock data definitions
 const INITIAL_USERS = [
-  { id: "1", name: "Rodion Bychkoviak", role: "UI/UX Designer", avatar: "RB", isDesigner: 1 },
-  { id: "2", name: "Yevhen Pavlenko", role: "UI/UX Designer", avatar: "YP", isDesigner: 1 },
-  { id: "3", name: "Anton Sakhatskyi", role: "UI/UX Designer", avatar: "AS", isDesigner: 1 },
+  { id: "1", name: "Rodion Bychkoviak", role: "UI/UX Designer", avatar: "RB", isDesigner: 1, color: "indigo" },
+  { id: "2", name: "Yevhen Pavlenko", role: "UI/UX Designer", avatar: "YP", isDesigner: 1, color: "emerald" },
+  { id: "3", name: "Anton Sakhatskyi", role: "UI/UX Designer", avatar: "AS", isDesigner: 1, color: "orange" },
   { id: "4", name: "Vadym Blyzniuk", role: "Implementation Consultant", avatar: "VB", isDesigner: 0 },
   { id: "5", name: "Olena Shyliuk", role: "Implementation Consultant", avatar: "OS", isDesigner: 0 },
   { id: "6", name: "Taras Kahnii", role: "Team Lead ES", avatar: "TK", isDesigner: 0 },
@@ -68,8 +68,12 @@ function initializeDb() {
       name TEXT,
       role TEXT,
       avatar TEXT,
-      isDesigner INTEGER
+      isDesigner INTEGER,
+      color TEXT
     )`);
+
+    // Ensure color column is added to users table if table already existed
+    db.run(`ALTER TABLE users ADD COLUMN color TEXT`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -98,8 +102,8 @@ function initializeDb() {
         console.log('Database empty. Seeding initial planner mock data...');
         
         // Seed users
-        const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?)');
-        INITIAL_USERS.forEach((u) => insertUser.run(u.id, u.name, u.role, u.avatar, u.isDesigner));
+        const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)');
+        INITIAL_USERS.forEach((u) => insertUser.run(u.id, u.name, u.role, u.avatar, u.isDesigner, u.color || null));
         insertUser.finalize();
 
         // Seed projects
@@ -172,10 +176,10 @@ app.get('/api/data', async (req, res) => {
 
 // User CRUD
 app.post('/api/users', (req, res) => {
-  const { id, name, role, avatar, isDesigner } = req.body;
+  const { id, name, role, avatar, isDesigner, color } = req.body;
   db.run(
-    'INSERT INTO users VALUES (?, ?, ?, ?, ?)',
-    [id, name, role, avatar, isDesigner ? 1 : 0],
+    'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+    [id, name, role, avatar, isDesigner ? 1 : 0, color || null],
     (err) => {
       if (err) res.status(500).json({ error: err.message });
       else res.status(201).json({ id });
@@ -185,10 +189,10 @@ app.post('/api/users', (req, res) => {
 
 app.put('/api/users/:id', (req, res) => {
   const { id } = req.params;
-  const { name, role, avatar, isDesigner } = req.body;
+  const { name, role, avatar, isDesigner, color } = req.body;
   db.run(
-    'UPDATE users SET name = ?, role = ?, avatar = ?, isDesigner = ? WHERE id = ?',
-    [name, role, avatar, isDesigner ? 1 : 0, id],
+    'UPDATE users SET name = ?, role = ?, avatar = ?, isDesigner = ?, color = ? WHERE id = ?',
+    [name, role, avatar, isDesigner ? 1 : 0, color || null, id],
     (err) => {
       if (err) res.status(500).json({ error: err.message });
       else res.json({ success: true });

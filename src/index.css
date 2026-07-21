@@ -310,11 +310,23 @@ body {
   right: 0;
   bottom: 0;
   pointer-events: none; /* Let clicks pass to cell for creating, but allocations themselves reset this */
-  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.allocation-lane {
+  position: relative;
+  width: 100%;
+  height: 48px;
+  pointer-events: none;
 }
 
 .allocation-capsule {
   position: absolute;
+  top: 0;
   pointer-events: auto; /* enable interaction for the capsule */
   height: 48px;
   border-radius: 24px;

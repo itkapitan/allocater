@@ -1,8 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ActionIcon, Button, Text, Avatar } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical, IconExchange } from '@tabler/icons-react';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
+
+// Helper to compute lanes for a project's allocations
+const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
+  // Sort allocations by startDate, then endDate
+  const sorted = [...projectAllocations].sort((a, b) => {
+    if (a.startDate !== b.startDate) {
+      return a.startDate.localeCompare(b.startDate);
+    }
+    return a.endDate.localeCompare(b.endDate);
+  });
+
+  const lanes: Allocation[][] = [];
+  sorted.forEach((allocation) => {
+    let assignedLane = -1;
+    for (let i = 0; i < lanes.length; i++) {
+      const hasOverlap = lanes[i].some((other) => {
+        return !(allocation.endDate < other.startDate || allocation.startDate > other.endDate);
+      });
+      if (!hasOverlap) {
+        assignedLane = i;
+        lanes[i].push(allocation);
+        break;
+      }
+    }
+    if (assignedLane === -1) {
+      lanes.push([allocation]);
+    }
+  });
+
+  return lanes;
+};
+
 
 interface CalendarGridProps {
   users: User[];
@@ -42,6 +74,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [dragCurrentIdx, setDragCurrentIdx] = useState<number | null>(null);
   const [activeDragProjectId, setActiveDragProjectId] = useState<string | null>(null);
 
+  const dragStartIdxRef = useRef<number | null>(null);
+  const dragCurrentIdxRef = useRef<number | null>(null);
+
   // Formatter helper
   const formatDateString = (date: Date) => {
     const year = date.getFullYear();
@@ -78,61 +113,88 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const handleCellMouseDown = (projectId: string, dayIdx: number) => {
     if (!isAdmin) return; // Read-only mode
 
-    const occupied = new Set<number>();
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const projectDesigners = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
+    if (projectDesigners.length === 0) return;
+
+    // Check which designers are occupied on this specific dayIdx
+    const targetDay = days[dayIdx];
+    const occupiedDesigners = new Set<string>();
     allocations
       .filter((a) => a.projectId === projectId)
       .forEach((alloc) => {
         const start = new Date(alloc.startDate);
         const end = new Date(alloc.endDate);
-        days.forEach((day, index) => {
-          if (day >= start && day <= end) {
-            occupied.add(index);
-          }
-        });
+        if (targetDay >= start && targetDay <= end) {
+          occupiedDesigners.add(alloc.designerId);
+        }
       });
 
-    if (occupied.has(dayIdx)) {
+    // If all designers of this project are occupied on this day, block creation
+    if (occupiedDesigners.size >= projectDesigners.length) {
       return;
     }
 
+    dragStartIdxRef.current = dayIdx;
+    dragCurrentIdxRef.current = dayIdx;
     setDragStartIdx(dayIdx);
     setDragCurrentIdx(dayIdx);
     setActiveDragProjectId(projectId);
 
     const handleMouseUp = () => {
-      setDragStartIdx((start) => {
-        setDragCurrentIdx((current) => {
-          if (start !== null && current !== null) {
-            const minIdx = Math.min(start, current);
-            const maxIdx = Math.max(start, current);
-            
-            const startDate = formatDateString(days[minIdx]);
-            const endDate = formatDateString(days[maxIdx]);
+      const start = dragStartIdxRef.current;
+      const current = dragCurrentIdxRef.current;
 
-            // Find first available designer in the project members list
-            const project = projects.find((p) => p.id === projectId);
-            const designers = users.filter((u) => u.isDesigner && project?.memberIds.includes(u.id));
-            const targetDesigner = designers[0];
+      if (start !== null && current !== null) {
+        const minIdx = Math.min(start, current);
+        const maxIdx = Math.max(start, current);
+        
+        const startDateStr = formatDateString(days[minIdx]);
+        const endDateStr = formatDateString(days[maxIdx]);
+        const startDateObj = new Date(startDateStr);
+        const endDateObj = new Date(endDateStr);
 
-            if (targetDesigner) {
-              // Check capacity of target designer (default 8)
-              const capacity = designerCapacities[targetDesigner.id] || 8;
-              const durationDays = maxIdx - minIdx + 1;
-              const totalHours = durationDays * capacity;
+        // Find all designers in the project
+        const designers = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
 
-              onAddAllocation({
-                projectId,
-                designerId: targetDesigner.id,
-                startDate,
-                endDate,
-                hours: totalHours,
-              });
+        // Find which designers are occupied in this range
+        const occupiedInNewRange = new Set<string>();
+        allocations
+          .filter((a) => a.projectId === projectId)
+          .forEach((alloc) => {
+            const aStart = new Date(alloc.startDate);
+            const aEnd = new Date(alloc.endDate);
+            if (!(endDateObj < aStart || startDateObj > aEnd)) {
+              occupiedInNewRange.add(alloc.designerId);
             }
-          }
-          return null;
-        });
-        return null;
-      });
+          });
+
+        // Find first designer who is NOT occupied
+        let targetDesigner = designers.find((d) => !occupiedInNewRange.has(d.id));
+        if (!targetDesigner) {
+          targetDesigner = designers[0]; // fallback
+        }
+
+        if (targetDesigner) {
+          const capacity = designerCapacities[targetDesigner.id] || 8;
+          const durationDays = maxIdx - minIdx + 1;
+          const totalHours = durationDays * capacity;
+
+          onAddAllocation({
+            projectId,
+            designerId: targetDesigner.id,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            hours: totalHours,
+          });
+        }
+      }
+
+      dragStartIdxRef.current = null;
+      dragCurrentIdxRef.current = null;
+      setDragStartIdx(null);
+      setDragCurrentIdx(null);
       setActiveDragProjectId(null);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -143,19 +205,27 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const handleCellMouseEnter = (projectId: string, dayIdx: number) => {
     if (!isAdmin) return;
     if (activeDragProjectId === projectId && dragStartIdx !== null) {
-      // Find occupied cells to prevent drawing through them
+      const project = projects.find((p) => p.id === projectId);
+      const projectDesigners = users.filter((u) => u.isDesigner && project?.memberIds.includes(u.id));
+      
       const occupied = new Set<number>();
-      allocations
-        .filter((a) => a.projectId === projectId)
-        .forEach((alloc) => {
-          const start = new Date(alloc.startDate);
-          const end = new Date(alloc.endDate);
-          days.forEach((day, index) => {
-            if (day >= start && day <= end) {
-              occupied.add(index);
-            }
-          });
+      if (projectDesigners.length > 0) {
+        days.forEach((day, index) => {
+          const occupiedDesigners = new Set<string>();
+          allocations
+            .filter((a) => a.projectId === projectId)
+            .forEach((alloc) => {
+              const start = new Date(alloc.startDate);
+              const end = new Date(alloc.endDate);
+              if (day >= start && day <= end) {
+                occupiedDesigners.add(alloc.designerId);
+              }
+            });
+          if (occupiedDesigners.size >= projectDesigners.length) {
+            occupied.add(index);
+          }
         });
+      }
 
       // Clamp target index so drag selection cannot span across occupied cells
       let targetIdx = dayIdx;
@@ -174,6 +244,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           }
         }
       }
+      dragCurrentIdxRef.current = targetIdx;
       setDragCurrentIdx(targetIdx);
     }
   };
@@ -231,6 +302,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
         const projectDesigners = projectMembers.filter((u) => u.isDesigner);
         const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+
+        // Compute lanes for this project
+        const projectAllocations = allocations.filter((a) => a.projectId === project.id);
+        const lanes = computeLanes(projectAllocations);
 
         return (
           <div className="project-row" key={project.id}>
@@ -396,7 +471,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </div>
 
             {/* Right Cell: Days Grid & Allocations overlay */}
-            <div className="calendar-days-cell">
+            <div 
+              className="calendar-days-cell"
+              style={{ minHeight: `${Math.max(140, lanes.length * 56 + 24)}px` }}
+            >
               {days.map((day, idx) => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                 
@@ -428,7 +506,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     onMouseEnter={() => handleCellMouseEnter(project.id, idx)}
                     style={{
                       backgroundColor: isDraggingOver
-                        ? colorConfigMap[project.color] || colorConfigMap.indigo
+                        ? colorConfigMap[projectDesigners[0]?.color || 'indigo'] || colorConfigMap.indigo
                         : undefined,
                       cursor: isAdmin ? 'crosshair' : 'default',
                     }}
@@ -438,22 +516,24 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
               {/* Allocations layer */}
               <div className="allocations-overlay">
-                {allocations
-                  .filter((a) => a.projectId === project.id)
-                  .map((allocation) => (
-                    <AllocationBar
-                      key={allocation.id}
-                      allocation={allocation}
-                      project={project}
-                      designers={projectDesigners}
-                      days={days}
-                      allocations={allocations}
-                      designerCapacities={designerCapacities}
-                      onUpdateAllocation={onUpdateAllocation}
-                      onDeleteAllocation={onDeleteAllocation}
-                      isAdmin={isAdmin}
-                    />
-                  ))}
+                {lanes.map((lane, laneIdx) => (
+                  <div key={laneIdx} className="allocation-lane">
+                    {lane.map((allocation) => (
+                      <AllocationBar
+                        key={allocation.id}
+                        allocation={allocation}
+                        project={project}
+                        designers={projectDesigners}
+                        days={days}
+                        allocations={allocations}
+                        designerCapacities={designerCapacities}
+                        onUpdateAllocation={onUpdateAllocation}
+                        onDeleteAllocation={onDeleteAllocation}
+                        isAdmin={isAdmin}
+                      />
+                    ))}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

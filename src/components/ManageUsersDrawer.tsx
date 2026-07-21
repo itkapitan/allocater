@@ -47,6 +47,16 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
   const [isDesigner, setIsDesigner] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState("indigo");
+
+  const colorOptions = [
+    { value: 'indigo', label: 'Indigo', hex: '#6366f1' },
+    { value: 'blue', label: 'Blue', hex: '#3b82f6' },
+    { value: 'teal', label: 'Teal', hex: '#0d9488' },
+    { value: 'emerald', label: 'Green', hex: '#10b981' },
+    { value: 'orange', label: 'Orange', hex: '#f59e0b' },
+    { value: 'rose', label: 'Pink', hex: '#f43f5e' },
+  ];
 
   // Edit mode state
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -73,6 +83,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
     setName(user.name);
     setRole(user.role);
     setIsDesigner(user.isDesigner);
+    setSelectedColor(user.color || "indigo");
     setAvatarFile(null);
 
     const isBase64 =
@@ -86,6 +97,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
     setName("");
     setRole("");
     setIsDesigner(false);
+    setSelectedColor("indigo");
     setAvatarFile(null);
     setAvatarBase64(null);
   };
@@ -125,6 +137,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
         role: role.trim(),
         avatar: finalAvatar,
         isDesigner,
+        color: isDesigner ? selectedColor : undefined,
       });
     } else {
       onAddUser({
@@ -132,6 +145,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
         role: role.trim(),
         avatar: finalAvatar,
         isDesigner,
+        color: isDesigner ? selectedColor : undefined,
       });
     }
 
@@ -208,6 +222,22 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
                   onChange={(e) => setIsDesigner(e.currentTarget.checked)}
                   mt="xs"
                 />
+                {isDesigner && (
+                  <div>
+                    <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Колір дизайнера (для таймлайну)</Text>
+                    <Group gap="xs">
+                      {colorOptions.map((opt) => (
+                        <div
+                          key={opt.value}
+                          className={`color-swatch-btn ${selectedColor === opt.value ? 'selected' : ''}`}
+                          style={{ backgroundColor: opt.hex }}
+                          onClick={() => setSelectedColor(opt.value)}
+                          title={opt.label}
+                        />
+                      ))}
+                    </Group>
+                  </div>
+                )}
                 <Group mt="xs" style={{ width: "100%" }} wrap="nowrap">
                   {editingUser && (
                     <Button
@@ -319,7 +349,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
 
                   <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
                     {user.isDesigner && (
-                      <Badge color="indigo" variant="light" size="sm">
+                      <Badge color={user.color || "indigo"} variant="light" size="sm">
                         Дизайнер
                       </Badge>
                     )}

@@ -12,16 +12,6 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
   const [isExpanded, setIsExpanded] = useState(false);
   const [name, setName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [color, setColor] = useState('indigo');
-
-  const colorOptions = [
-    { value: 'indigo', label: 'Indigo', hex: '#6366f1' },
-    { value: 'blue', label: 'Blue', hex: '#3b82f6' },
-    { value: 'teal', label: 'Teal', hex: '#0d9488' },
-    { value: 'emerald', label: 'Green', hex: '#10b981' },
-    { value: 'orange', label: 'Orange', hex: '#f59e0b' },
-    { value: 'rose', label: 'Pink', hex: '#f43f5e' },
-  ];
 
   const handleMemberToggle = (userId: string) => {
     setSelectedMembers((prev) =>
@@ -31,10 +21,9 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onAddProject(name.trim(), color, selectedMembers);
+    onAddProject(name.trim(), 'indigo', selectedMembers);
     setName('');
     setSelectedMembers([]);
-    setColor('indigo');
     setIsExpanded(false);
   };
 
@@ -73,21 +62,6 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
           onChange={(e) => setName(e.currentTarget.value)}
           required
         />
-
-        <div>
-          <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Колір проєкту</Text>
-          <Group gap="xs">
-            {colorOptions.map((opt) => (
-              <div
-                key={opt.value}
-                className={`color-swatch-btn ${color === opt.value ? 'selected' : ''}`}
-                style={{ backgroundColor: opt.hex }}
-                onClick={() => setColor(opt.value)}
-                title={opt.label}
-              />
-            ))}
-          </Group>
-        </div>
 
         <div>
           <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Команда проєкту</Text>
