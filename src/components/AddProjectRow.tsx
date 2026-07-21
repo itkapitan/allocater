@@ -81,7 +81,7 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
                     style={{ cursor: 'pointer' }}
                   />
                   {(() => {
-                    const isBase64Image = user.avatar && (user.avatar.startsWith('data:image/') || user.avatar.startsWith('http'));
+                    const isBase64Image = user.avatar && (user.avatar.startsWith('data:image/') || user.avatar.startsWith('http') || user.avatar.startsWith('/'));
                     return (
                       <div
                         className="project-member-avatar"

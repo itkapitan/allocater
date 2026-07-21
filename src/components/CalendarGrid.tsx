@@ -370,7 +370,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         style={{ cursor: isAdmin ? 'pointer' : 'default' }}
                       >
                         {(() => {
-                          const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http'));
+                          const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
                           return (
                             <div
                               className="project-member-avatar"
@@ -416,7 +416,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {(() => {
-                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http'));
+                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
                                 return (
                                   <Avatar size="xs" color="blue" radius="xl" src={isBase64Image ? u.avatar : undefined}>
                                     {!isBase64Image && u.avatar}
@@ -462,7 +462,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {(() => {
-                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http'));
+                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
                                 return (
                                   <Avatar size="xs" color="indigo" radius="xl" src={isBase64Image ? u.avatar : undefined}>
                                     {!isBase64Image && u.avatar}

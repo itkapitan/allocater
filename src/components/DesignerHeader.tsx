@@ -201,7 +201,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
                   <div className={cardClass}>
                     <div className="designer-header">
                       {(() => {
-                        const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http'));
+                        const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
                         return (
                           <div
                             className="designer-avatar"

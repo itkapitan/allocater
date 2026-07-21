@@ -290,7 +290,8 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
             const isBase64Image =
               user.avatar &&
               (user.avatar.startsWith("data:image/") ||
-                user.avatar.startsWith("http"));
+                user.avatar.startsWith("http") ||
+                user.avatar.startsWith("/"));
 
             return (
               <Card

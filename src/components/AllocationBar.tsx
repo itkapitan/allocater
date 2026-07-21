@@ -340,7 +340,7 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
               >
                 {(() => {
                   if (!designer) return null;
-                  const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http'));
+                  const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
                   return (
                     <div
                       style={{
