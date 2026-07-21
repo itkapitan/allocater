@@ -559,6 +559,77 @@ app.get('/api/debug', async (req, res) => {
   }
 });
 
+// Migration endpoint from SQLite to Postgres
+app.post('/api/migrate-from-sqlite', async (req, res) => {
+  const { email, password, data } = req.body;
+  if (email !== 'radvancor@gmail.com' || password !== '80938093r') {
+    return res.status(401).json({ error: 'Невірні адмін-дані' });
+  }
+  
+  if (!isPostgres) {
+    return res.status(400).json({ error: 'Цей ендпоінт призначений тільки для продакшн бази Postgres' });
+  }
+  
+  try {
+    const { users, projects, allocations, capacities } = data;
+    
+    // 1. Migrate users
+    if (users && users.length > 0) {
+      for (const u of users) {
+        await executeQuery(
+          `INSERT INTO users (id, name, role, avatar, isDesigner, color) 
+           VALUES (?, ?, ?, ?, ?, ?) 
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, avatar = EXCLUDED.avatar, isDesigner = EXCLUDED.isDesigner, color = EXCLUDED.color`,
+          [u.id, u.name, u.role, u.avatar, u.isDesigner ? 1 : 0, u.color || null]
+        );
+      }
+    }
+    
+    // 2. Migrate projects
+    if (projects && projects.length > 0) {
+      for (const p of projects) {
+        await executeQuery(
+          `INSERT INTO projects (id, name, color, memberIds) 
+           VALUES (?, ?, ?, ?) 
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, memberIds = EXCLUDED.memberIds`,
+          [p.id, p.name, p.color, typeof p.memberIds === 'string' ? p.memberIds : JSON.stringify(p.memberIds)]
+        );
+      }
+    }
+    
+    // 3. Migrate allocations
+    if (allocations && allocations.length > 0) {
+      // Clear allocations and recreate them
+      await executeQuery('DELETE FROM allocations');
+      for (const a of allocations) {
+        await executeQuery(
+          `INSERT INTO allocations (id, projectId, designerId, startDate, endDate, hours, offsetHours) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [a.id, a.projectId, a.designerId, a.startDate, a.endDate, a.hours, a.offsetHours || 0]
+        );
+      }
+    }
+    
+    // 4. Migrate capacities
+    if (capacities) {
+      const capEntries = Array.isArray(capacities) ? capacities : Object.entries(capacities).map(([designerId, dailyCapacity]) => ({ designerId, dailyCapacity }));
+      for (const c of capEntries) {
+        await executeQuery(
+          `INSERT INTO capacities (designerId, dailyCapacity) 
+           VALUES (?, ?) 
+           ON CONFLICT (designerId) DO UPDATE SET dailyCapacity = EXCLUDED.dailyCapacity`,
+          [c.designerId, c.dailyCapacity]
+        );
+      }
+    }
+    
+    res.json({ success: true, message: 'Дані успішно імпортовані в Postgres' });
+  } catch (err) {
+    console.error('Migration failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, () => {
   console.log(`Planner Express Server running on port ${PORT}`);
