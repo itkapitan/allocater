@@ -6,33 +6,26 @@ import { AllocationBar } from './AllocationBar';
 
 // Helper to compute lanes for a project's allocations
 const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
-  // Sort allocations by startDate, then endDate
-  const sorted = [...projectAllocations].sort((a, b) => {
-    if (a.startDate !== b.startDate) {
-      return a.startDate.localeCompare(b.startDate);
+  // Group allocations by designerId to ensure each designer gets their own stable horizontal track/lane
+  const groups: Record<string, Allocation[]> = {};
+  projectAllocations.forEach((alloc) => {
+    if (!groups[alloc.designerId]) {
+      groups[alloc.designerId] = [];
     }
-    return a.id.localeCompare(b.id);
+    groups[alloc.designerId].push(alloc);
   });
 
-  const lanes: Allocation[][] = [];
-  sorted.forEach((allocation) => {
-    let assignedLane = -1;
-    for (let i = 0; i < lanes.length; i++) {
-      const hasOverlap = lanes[i].some((other) => {
-        return !(allocation.endDate < other.startDate || allocation.startDate > other.endDate);
-      });
-      if (!hasOverlap) {
-        assignedLane = i;
-        lanes[i].push(allocation);
-        break;
-      }
+  // Sort designer IDs stably (numerically or alphabetically) to keep the vertical order consistent
+  const sortedDesignerIds = Object.keys(groups).sort((a, b) => {
+    const numA = parseInt(a, 10);
+    const numB = parseInt(b, 10);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
     }
-    if (assignedLane === -1) {
-      lanes.push([allocation]);
-    }
+    return a.localeCompare(b);
   });
 
-  return lanes;
+  return sortedDesignerIds.map((designerId) => groups[designerId]);
 };
 
 
