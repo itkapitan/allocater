@@ -501,6 +501,54 @@ app.post('/api/login', (req, res) => {
   }
 });
 
+// Debug endpoint
+app.get('/api/debug', async (req, res) => {
+  try {
+    const envKeys = Object.keys(process.env).filter(k => !k.includes('PASSWORD') && !k.includes('TOKEN') && !k.includes('SECRET'));
+    let dbStatus = 'unknown';
+    let dbError = null;
+    let tablesInfo = {};
+    
+    try {
+      if (isPostgres) {
+        const client = await pgPool.connect();
+        dbStatus = 'postgres-connected';
+        client.release();
+        
+        // Fetch tables list
+        const tables = await executeQuery("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
+        tablesInfo.tables = tables.map(t => t.table_name);
+        
+        // Count users
+        try {
+          const userCount = await executeQuery("SELECT COUNT(*) as count FROM users");
+          tablesInfo.userCount = userCount;
+        } catch (e) {
+          tablesInfo.userCountError = e.message;
+        }
+      } else {
+        dbStatus = 'sqlite-connected';
+        const tables = await executeQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        tablesInfo.tables = tables.map(t => t.name);
+      }
+    } catch (e) {
+      dbStatus = 'connection-failed';
+      dbError = e.message;
+    }
+    
+    res.json({
+      isPostgres,
+      dbStatus,
+      dbError,
+      envKeys,
+      tablesInfo,
+      vercelEnv: process.env.VERCEL || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, () => {
   console.log(`Planner Express Server running on port ${PORT}`);
