@@ -11,7 +11,7 @@ const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
     if (a.startDate !== b.startDate) {
       return a.startDate.localeCompare(b.startDate);
     }
-    return a.endDate.localeCompare(b.endDate);
+    return a.id.localeCompare(b.id);
   });
 
   const lanes: Allocation[][] = [];
