@@ -336,15 +336,20 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           );
         })}
       </div>
-
       {/* Grid Rows for each project */}
       {projects.map((project) => {
         const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
         const projectDesigners = projectMembers.filter((u) => u.isDesigner);
         const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+        const startOfWeekStr = formatDateString(days[0]);
+        const endOfWeekStr = formatDateString(days[days.length - 1]);
 
         // Compute lanes for this project
-        const projectAllocations = allocations.filter((a) => a.projectId === project.id);
+        const projectAllocations = allocations.filter((a) => {
+          return a.projectId === project.id &&
+                 a.startDate <= endOfWeekStr &&
+                 a.endDate >= startOfWeekStr;
+        });
         const lanes = computeLanes(projectAllocations);
 
         return (
