@@ -401,10 +401,10 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
       </Group>
 
       {/* Designers Capacity Cards Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', minHeight: '144px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', minHeight: '176px' }}>
         {loading ? (
           Array.from({ length: 3 }).map((_, idx) => (
-            <Skeleton key={idx} height={144} radius="lg" animate />
+            <Skeleton key={idx} height={176} radius="lg" animate />
           ))
         ) : (
           designers.map((designer) => {
