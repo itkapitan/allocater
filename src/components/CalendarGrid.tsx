@@ -457,17 +457,29 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       </div>
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="projects-list">
-          {(provided) => (
-            <div
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              className="projects-rows-container"
-            >
-              {projects.map((project, idx) => {
-                const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
-                const projectDesigners = projectMembers.filter((u) => u.isDesigner);
-                const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
-                const startOfWeekStr = formatDateString(days[0]);
+          {(provided) => {
+            const startOfWeekStrVal = formatDateString(days[0]);
+            const endOfWeekStrVal = formatDateString(days[days.length - 1]);
+            const visibleProjects = projects.filter((project) => {
+              if (!project.isArchived) return true;
+              return allocations.some((a) => {
+                return a.projectId === project.id &&
+                       a.startDate <= endOfWeekStrVal &&
+                       a.endDate >= startOfWeekStrVal;
+              });
+            });
+
+            return (
+              <div
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="projects-rows-container"
+              >
+                {visibleProjects.map((project, idx) => {
+                  const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
+                  const projectDesigners = projectMembers.filter((u) => u.isDesigner);
+                  const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+                  const startOfWeekStr = formatDateString(days[0]);
                 const endOfWeekStr = formatDateString(days[days.length - 1]);
 
                 // Compute lanes for this project
@@ -738,7 +750,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               })}
               {provided.placeholder}
             </div>
-          )}
+          );
+        }}
         </Droppable>
       </DragDropContext>
 

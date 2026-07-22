@@ -13,6 +13,7 @@ export interface Project {
   color: string; // css color or mantine theme color (e.g. violet, blue, teal, orange, pink, cyan)
   memberIds: string[]; // list of user ids in this project
   spaceId?: string;
+  isArchived?: boolean;
 }
 
 export interface Allocation {

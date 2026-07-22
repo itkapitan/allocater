@@ -36,9 +36,22 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
     return `hsl(${h}, 60%, 45%)`;
   };
 
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExpand = () => {
+    setIsExpanded(true);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+    }, 50);
+  };
+
   if (!isExpanded) {
     return (
-      <div className="add-project-bar" onClick={() => setIsExpanded(true)}>
+      <div className="add-project-bar" onClick={handleExpand}>
         <IconPlus size={20} />
         <span>Додати новий проєкт</span>
       </div>
@@ -56,6 +69,7 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
 
       <Stack gap="md">
         <TextInput
+          ref={inputRef}
           label="Назва проєкту"
           placeholder="Введіть назву (наприклад: Master ЛК)"
           value={name}

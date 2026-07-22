@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MantineProvider, createTheme, Stack } from '@mantine/core';
+import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group } from '@mantine/core';
 import type { User, Project, Allocation, Space } from './types';
 import { DesignerHeader } from './components/DesignerHeader';
 import { CalendarGrid } from './components/CalendarGrid';
@@ -152,6 +152,11 @@ export const App: React.FC = () => {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [activeSpaceId, setActiveSpaceId] = useState<string>('1');
   const [manageSpacesOpened, setManageSpacesOpened] = useState(false);
+
+  // --- Project Deletion States ---
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleteProjectModalOpened, setDeleteProjectModalOpened] = useState(false);
+  const [projectHasAllocations, setProjectHasAllocations] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -376,12 +381,44 @@ export const App: React.FC = () => {
 
   const handleDeleteProject = (projectId: string) => {
     if (!isAdmin) return;
-    setProjects((prev) => prev.filter((p) => p.id !== projectId));
-    setAllocations((prev) => prev.filter((a) => a.projectId !== projectId));
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
 
-    fetch(`/api/projects/${projectId}`, {
+    const hasAlloc = allocations.some((a) => a.projectId === projectId);
+    setProjectToDelete(project);
+    setProjectHasAllocations(hasAlloc);
+    setDeleteProjectModalOpened(true);
+  };
+
+  const confirmDeleteProjectCompletely = () => {
+    if (!projectToDelete) return;
+    const pid = projectToDelete.id;
+    setProjects((prev) => prev.filter((p) => p.id !== pid));
+    setAllocations((prev) => prev.filter((a) => a.projectId !== pid));
+
+    fetch(`/api/projects/${pid}`, {
       method: 'DELETE',
     }).catch((err) => console.error('Error deleting project from SQLite:', err));
+
+    setDeleteProjectModalOpened(false);
+    setProjectToDelete(null);
+  };
+
+  const confirmArchiveProject = () => {
+    if (!projectToDelete) return;
+    const pid = projectToDelete.id;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === pid ? { ...p, isArchived: true } : p))
+    );
+
+    fetch(`/api/projects/${pid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isArchived: true }),
+    }).catch((err) => console.error('Error archiving project in SQLite:', err));
+
+    setDeleteProjectModalOpened(false);
+    setProjectToDelete(null);
   };
 
   const handleAddProjectMember = (projectId: string, userId: string) => {
@@ -716,6 +753,60 @@ export const App: React.FC = () => {
           onDeleteSpace={handleDeleteSpace}
           isAdmin={isAdmin}
         />
+        {/* Project Deletion Confirmation Modal */}
+        <Modal
+          opened={deleteProjectModalOpened}
+          onClose={() => {
+            setDeleteProjectModalOpened(false);
+            setProjectToDelete(null);
+          }}
+          title={<strong>Видалення проєкту</strong>}
+          centered
+          size="lg"
+        >
+          {projectToDelete && (
+            <Stack gap="md">
+              {projectHasAllocations ? (
+                <>
+                  <Text size="sm" style={{ lineHeight: 1.5 }}>
+                    Проєкт <strong>{projectToDelete.name}</strong> містить зафіксовані години в історії. Як ви хочете його видалити?
+                  </Text>
+                  <Group justify="flex-end" mt="md" gap="xs">
+                    <Button variant="subtle" color="gray" onClick={() => {
+                      setDeleteProjectModalOpened(false);
+                      setProjectToDelete(null);
+                    }}>
+                      Скасувати
+                    </Button>
+                    <Button color="indigo" onClick={confirmArchiveProject}>
+                      Видалити з пустих тижнів
+                    </Button>
+                    <Button color="red" onClick={confirmDeleteProjectCompletely}>
+                      Видалити повністю
+                    </Button>
+                  </Group>
+                </>
+              ) : (
+                <>
+                  <Text size="sm">
+                    Ви впевнені, що хочете видалити проєкт <strong>{projectToDelete.name}</strong>?
+                  </Text>
+                  <Group justify="flex-end" mt="md">
+                    <Button variant="subtle" color="gray" onClick={() => {
+                      setDeleteProjectModalOpened(false);
+                      setProjectToDelete(null);
+                    }}>
+                      Скасувати
+                    </Button>
+                    <Button color="red" onClick={confirmDeleteProjectCompletely}>
+                      Видалити
+                    </Button>
+                  </Group>
+                </>
+              )}
+            </Stack>
+          )}
+        </Modal>
       </div>
     </MantineProvider>
   );

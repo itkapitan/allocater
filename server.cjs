@@ -133,6 +133,12 @@ async function initializeDb() {
       // Ignored if column already exists
     }
 
+    try {
+      await executeQuery(`ALTER TABLE projects ADD COLUMN isArchived INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
+
     await executeQuery(`CREATE TABLE IF NOT EXISTS allocations (
       id TEXT PRIMARY KEY,
       projectId TEXT,
@@ -317,7 +323,8 @@ app.get('/api/data', async (req, res) => {
     const projects = rawProjects.map((p) => ({
       ...p,
       memberIds: JSON.parse(p.memberids || p.memberIds || '[]'),
-      spaceId: p.spaceid || p.spaceId || '1'
+      spaceId: p.spaceid || p.spaceId || '1',
+      isArchived: !!p.isarchived || !!p.isArchived
     }));
 
     const spaces = rawSpaces.map((s) => ({
@@ -425,8 +432,8 @@ app.post('/api/projects', async (req, res) => {
     const newSortOrder = maxSort + 1;
 
     await executeQuery(
-      'INSERT INTO projects (id, name, color, memberIds, sortOrder, spaceId) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, name, color, JSON.stringify(memberIds), newSortOrder, spaceId || '1']
+      'INSERT INTO projects (id, name, color, memberIds, sortOrder, spaceId, isArchived) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, name, color, JSON.stringify(memberIds), newSortOrder, spaceId || '1', 0]
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -503,23 +510,27 @@ app.put('/api/projects/order', async (req, res) => {
 
 app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, color, memberIds } = req.body;
-  try {
-    let query = 'UPDATE projects SET ';
-    const params = [];
-    
-    if (name !== undefined) {
-      query += 'name = ?, ';
-      params.push(name);
-    }
-    if (color !== undefined) {
-      query += 'color = ?, ';
-      params.push(color);
-    }
-    if (memberIds !== undefined) {
-      query += 'memberIds = ?, ';
-      params.push(JSON.stringify(memberIds));
-    }
+    const { name, color, memberIds, isArchived } = req.body;
+    try {
+      let query = 'UPDATE projects SET ';
+      const params = [];
+      
+      if (name !== undefined) {
+        query += 'name = ?, ';
+        params.push(name);
+      }
+      if (color !== undefined) {
+        query += 'color = ?, ';
+        params.push(color);
+      }
+      if (memberIds !== undefined) {
+        query += 'memberIds = ?, ';
+        params.push(JSON.stringify(memberIds));
+      }
+      if (isArchived !== undefined) {
+        query += 'isArchived = ?, ';
+        params.push(isArchived ? 1 : 0);
+      }
     
     query = query.slice(0, -2) + ' WHERE id = ?';
     params.push(id);
