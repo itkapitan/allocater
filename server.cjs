@@ -654,6 +654,20 @@ app.put('/api/projects/order', async (req, res) => {
   }
 });
 
+// Admin SQL execution endpoint
+app.post('/api/run-sql', async (req, res) => {
+  const { email, password, sql, params } = req.body;
+  if (email !== 'radvancor@gmail.com' || password !== '80938093r') {
+    return res.status(401).json({ error: 'Невірні адмін-дані' });
+  }
+  try {
+    const result = await executeQuery(sql, params || []);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, () => {
   console.log(`Planner Express Server running on port ${PORT}`);
