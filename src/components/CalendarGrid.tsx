@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group } from '@mantine/core';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
@@ -26,7 +26,40 @@ const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
     return a.localeCompare(b);
   });
 
-  return sortedDesignerIds.map((designerId) => groups[designerId]);
+  const finalLanes: Allocation[][] = [];
+
+  sortedDesignerIds.forEach((designerId) => {
+    const designerAllocations = groups[designerId];
+    
+    // Sort by startDate
+    designerAllocations.sort((a, b) => a.startDate.localeCompare(b.startDate));
+    
+    // Pack overlapping allocations for this designer into sub-lanes
+    const subLanes: Allocation[][] = [];
+    
+    designerAllocations.forEach((alloc) => {
+      let placed = false;
+      for (const lane of subLanes) {
+        // Check if alloc overlaps with any item in this lane
+        const hasOverlap = lane.some((item) => {
+          return alloc.startDate <= item.endDate && alloc.endDate >= item.startDate;
+        });
+        if (!hasOverlap) {
+          lane.push(alloc);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        subLanes.push([alloc]);
+      }
+    });
+    
+    // Add all sub-lanes to final lanes
+    finalLanes.push(...subLanes);
+  });
+
+  return finalLanes;
 };
 
 
@@ -107,10 +140,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   // Handle drag-selection and click-to-create
   const handleCellMouseDown = (e: React.MouseEvent, projectId: string, dayIdx: number) => {
-    // If it's a right click or not admin, ignore
     if (e.button !== 0 || !isAdmin) return;
 
-    // Check if target is a capsule or handle (should not start selection box here)
     const target = e.target as HTMLElement;
     if (target.closest('.allocation-capsule') || target.closest('.mantine-Popover-dropdown')) {
       return;
@@ -128,12 +159,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     const minX = headerRect.right;
     const maxX = gridRect.right;
-    const minY = headerRect.bottom;
-    const maxY = gridRect.bottom;
 
-    // Clip starting point
+    // Viewport-based coordinates (safe for scrolling)
     const startX = Math.max(minX, Math.min(maxX, e.clientX));
-    const startY = Math.max(minY, Math.min(maxY, e.clientY));
+    const startY = e.clientY;
 
     selectionStartRef.current = {
       x: startX,
@@ -149,63 +178,84 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       currentY: startY,
     });
 
-    // Clear previous selection on new click
     setSelectedAllocationIds([]);
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const currentMouseXRef = { current: startX };
+    const currentMouseYRef = { current: startY };
+
+    const updateSelection = () => {
+      const currentX = Math.max(minX, Math.min(maxX, currentMouseXRef.current));
+      const currentY = Math.max(0, Math.min(window.innerHeight, currentMouseYRef.current));
+
       setSelectionBox((box) => {
         if (!box) return null;
-        
-        // Clip current point
-        const currentX = Math.max(minX, Math.min(maxX, moveEvent.clientX));
-        const currentY = Math.max(minY, Math.min(maxY, moveEvent.clientY));
-
-        // Perform selection check on move
-        const boxRect = {
-          left: Math.min(box.startX, currentX),
-          top: Math.min(box.startY, currentY),
-          right: Math.max(box.startX, currentX),
-          bottom: Math.max(box.startY, currentY),
-        };
-
-        const selectedIds: string[] = [];
-        const capsules = document.querySelectorAll('.allocation-capsule');
-        capsules.forEach((capsule) => {
-          const id = capsule.getAttribute('data-allocation-id');
-          if (id) {
-            const rect = capsule.getBoundingClientRect();
-            const intersects = !(
-              rect.right < boxRect.left ||
-              rect.left > boxRect.right ||
-              rect.bottom < boxRect.top ||
-              rect.top > boxRect.bottom
-            );
-            if (intersects) {
-              selectedIds.push(id);
-            }
-          }
-        });
-        setSelectedAllocationIds(selectedIds);
-
         return { ...box, currentX, currentY };
       });
+
+      const boxRect = {
+        left: Math.min(startX, currentX),
+        top: Math.min(startY, currentY),
+        right: Math.max(startX, currentX),
+        bottom: Math.max(startY, currentY),
+      };
+
+      const selectedIds: string[] = [];
+      const capsules = document.querySelectorAll('.allocation-capsule');
+      capsules.forEach((capsule) => {
+        const id = capsule.getAttribute('data-allocation-id');
+        if (id) {
+          const rect = capsule.getBoundingClientRect();
+          const intersects = !(
+            rect.right < boxRect.left ||
+            rect.left > boxRect.right ||
+            rect.bottom < boxRect.top ||
+            rect.top > boxRect.bottom
+          );
+          if (intersects) {
+            selectedIds.push(id);
+          }
+        }
+      });
+      setSelectedAllocationIds(selectedIds);
     };
 
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      currentMouseXRef.current = moveEvent.clientX;
+      currentMouseYRef.current = moveEvent.clientY;
+      updateSelection();
+    };
+
+    // Auto-scroll loop (60fps) during drag-selection
+    const scrollInterval = setInterval(() => {
+      const mouseY = currentMouseYRef.current;
+      if (mouseY === null) return;
+
+      const threshold = 80;
+      const speed = 15;
+
+      if (mouseY > window.innerHeight - threshold) {
+        window.scrollBy(0, speed);
+        updateSelection();
+      } else if (mouseY < 120) {
+        window.scrollBy(0, -speed);
+        updateSelection();
+      }
+    }, 16);
+
     const handleMouseUp = (upEvent: MouseEvent) => {
+      clearInterval(scrollInterval);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       document.body.classList.remove('is-selecting');
 
       const start = selectionStartRef.current;
       if (start) {
-        // Clip up event coordinate
         const currentX = Math.max(minX, Math.min(maxX, upEvent.clientX));
-        const currentY = Math.max(minY, Math.min(maxY, upEvent.clientY));
+        const currentY = upEvent.clientY;
 
         const deltaX = Math.abs(currentX - start.x);
         const deltaY = Math.abs(currentY - start.y);
 
-        // If it was a small click (no drag), treat as click-to-create!
         if (deltaX < 5 && deltaY < 5) {
           handleSingleClickCreate(projectId, dayIdx);
         }
@@ -462,67 +512,80 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             {projectMembers.map((member) => {
                               const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
                               return (
-                                <Menu key={member.id} shadow="md" width={220} trigger="click" disabled={!isAdmin}>
-                                  <Menu.Target>
-                                    <div
-                                      className="member-avatar-wrapper"
-                                      style={{
-                                        cursor: isAdmin ? 'pointer' : 'default',
-                                        position: 'relative'
-                                      }}
-                                    >
-                                      <Avatar
-                                        size="sm"
-                                        radius="xl"
-                                        color={member.isDesigner ? 'indigo' : 'gray'}
-                                        src={isBase64Image ? member.avatar : undefined}
-                                        title={member.name}
-                                       >
-                                         {!isBase64Image && member.avatar}
-                                       </Avatar>
-                                     </div>
-                                   </Menu.Target>
-                                  <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                                    <Menu.Label>Замінити виконавця</Menu.Label>
-                                    {nonProjectUsers.length === 0 ? (
-                                      <Menu.Item disabled>Немає інших користувачів</Menu.Item>
-                                    ) : (
-                                      nonProjectUsers.map((u) => (
-                                        <Menu.Item
-                                          key={u.id}
-                                          onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
+                                <Tooltip
+                                  key={member.id}
+                                  label={
+                                    <div style={{ padding: '2px 4px' }}>
+                                      <Text size="xs" fw={700} c="white">{member.name}</Text>
+                                      <Text size="10px" style={{ color: '#cbd5e1' }}>{member.role}</Text>
+                                    </div>
+                                  }
+                                  position="top"
+                                  withArrow
+                                  multiline
+                                >
+                                  <Menu shadow="md" width={220} trigger="click" disabled={!isAdmin}>
+                                    <Menu.Target>
+                                      <div
+                                        className="member-avatar-wrapper"
+                                        style={{
+                                          cursor: isAdmin ? 'pointer' : 'default',
+                                          position: 'relative'
+                                        }}
+                                      >
+                                        <Avatar
+                                          size="sm"
+                                          radius="xl"
+                                          color={member.isDesigner ? 'indigo' : 'gray'}
+                                          src={isBase64Image ? member.avatar : undefined}
+                                          title={member.name}
                                         >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {(() => {
-                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                              return (
-                                                <Avatar
-                                                  size="xs"
-                                                  radius="xl"
-                                                  src={isBase64 ? u.avatar : undefined}
-                                                >
-                                                  {!isBase64 && u.avatar}
-                                                </Avatar>
-                                              );
-                                            })()}
-                                            <div>
-                                              <Text size="xs" fw={600}>{u.name}</Text>
-                                              <Text size="10px" c="dimmed">{u.role}</Text>
+                                          {!isBase64Image && member.avatar}
+                                        </Avatar>
+                                      </div>
+                                    </Menu.Target>
+                                    <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                      <Menu.Label>Замінити виконавця</Menu.Label>
+                                      {nonProjectUsers.length === 0 ? (
+                                        <Menu.Item disabled>Немає інших користувачів</Menu.Item>
+                                      ) : (
+                                        nonProjectUsers.map((u) => (
+                                          <Menu.Item
+                                            key={u.id}
+                                            onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
+                                          >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              {(() => {
+                                                const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
+                                                return (
+                                                  <Avatar
+                                                    size="xs"
+                                                    radius="xl"
+                                                    src={isBase64 ? u.avatar : undefined}
+                                                  >
+                                                    {!isBase64 && u.avatar}
+                                                  </Avatar>
+                                                );
+                                              })()}
+                                              <div>
+                                                <Text size="xs" fw={600}>{u.name}</Text>
+                                                <Text size="10px" c="dimmed">{u.role}</Text>
+                                              </div>
                                             </div>
-                                          </div>
-                                        </Menu.Item>
-                                      ))
-                                    )}
-                                    <Menu.Divider />
-                                    <Menu.Item
-                                      color="red"
-                                      leftSection={<IconTrash size={14} />}
-                                      onClick={() => onRemoveProjectMember(project.id, member.id)}
-                                    >
-                                      Видалити з проєкту
-                                    </Menu.Item>
-                                  </Menu.Dropdown>
-                                </Menu>
+                                          </Menu.Item>
+                                        ))
+                                      )}
+                                      <Menu.Divider />
+                                      <Menu.Item
+                                        color="red"
+                                        leftSection={<IconTrash size={14} />}
+                                        onClick={() => onRemoveProjectMember(project.id, member.id)}
+                                      >
+                                        Видалити з проєкту
+                                      </Menu.Item>
+                                    </Menu.Dropdown>
+                                  </Menu>
+                                </Tooltip>
                               );
                             })}
 
