@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Group, Text, Button, ActionIcon, Progress, HoverCard, Table, Modal, TextInput, PasswordInput, Stack } from '@mantine/core';
+import { Group, Text, Button, ActionIcon, Progress, HoverCard, Table, Modal, TextInput, PasswordInput, Stack, Skeleton } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight, IconUsers, IconLogin, IconLogout, IconShield, IconFolder } from '@tabler/icons-react';
 import type { User, Allocation, Project } from '../types';
 
@@ -19,6 +19,7 @@ interface DesignerHeaderProps {
   onLogin: (email: string, pass: string) => Promise<boolean>;
   onLogout: () => void;
   isSticky?: boolean;
+  loading?: boolean;
 }
 
 export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
@@ -37,6 +38,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   onLogin,
   onLogout,
   isSticky = false,
+  loading = false,
 }) => {
   const designers = users.filter((u) => u.isDesigner);
 
@@ -110,8 +112,13 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
 
         {/* Right Side: Designers list (compact) */}
         <Group gap="lg">
-          {designers.map((designer) => {
-            const dailyCap = designerCapacities[designer.id] || 8;
+          {loading ? (
+            Array.from({ length: 3 }).map((_, idx) => (
+              <Skeleton key={idx} height={28} width={100} radius="xl" animate />
+            ))
+          ) : (
+            designers.map((designer) => {
+              const dailyCap = designerCapacities[designer.id] || 8;
             const weeklyDaysCount = 5;
             const totalWeeklyCap = dailyCap * weeklyDaysCount;
 
@@ -264,8 +271,9 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
                 </HoverCard.Dropdown>
               </HoverCard>
             );
-          })}
-        </Group>
+          })
+        )}
+      </Group>
 
         {/* Modal for login inside compact header as well */}
         <Modal
@@ -393,9 +401,14 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
       </Group>
 
       {/* Designers Capacity Cards Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        {designers.map((designer) => {
-          const dailyCap = designerCapacities[designer.id] || 8;
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', minHeight: '144px' }}>
+        {loading ? (
+          Array.from({ length: 3 }).map((_, idx) => (
+            <Skeleton key={idx} height={144} radius="lg" animate />
+          ))
+        ) : (
+          designers.map((designer) => {
+            const dailyCap = designerCapacities[designer.id] || 8;
           const weeklyDaysCount = 5; // Monday to Friday working days
           const totalWeeklyCap = dailyCap * weeklyDaysCount;
 
@@ -639,8 +652,9 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
               </div>
             </div>
           );
-        })}
-      </div>
+        })
+      )}
+    </div>
 
       {/* Admin Login Modal */}
       <Modal

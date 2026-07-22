@@ -147,6 +147,7 @@ export const App: React.FC = () => {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
   const [isSticky, setIsSticky] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // --- Spaces State ---
   const [spaces, setSpaces] = useState<Space[]>([]);
@@ -228,8 +229,12 @@ export const App: React.FC = () => {
           const newPath = `/${spaceSlug}/${weekSlug}`;
           window.history.replaceState(null, '', newPath);
         }
+        setLoading(false);
       })
-      .catch((err) => console.error('Error fetching data from SQLite API:', err));
+      .catch((err) => {
+        console.error('Error fetching data from SQLite API:', err);
+        setLoading(false);
+      });
   }, []);
 
   // Sync state changes to address bar URL
@@ -678,6 +683,7 @@ export const App: React.FC = () => {
                 onLogin={handleLogin}
                 onLogout={handleLogout}
                 isSticky={true}
+                loading={loading}
               />
             </div>
           )}
@@ -700,6 +706,7 @@ export const App: React.FC = () => {
               onLogin={handleLogin}
               onLogout={handleLogout}
               isSticky={false}
+              loading={loading}
             />
           </div>
 
@@ -721,6 +728,7 @@ export const App: React.FC = () => {
             onUpdateProjectsList={handleUpdateProjectsList}
             onSaveProjectsOrder={handleSaveProjectsOrder}
             isAdmin={isAdmin}
+            loading={loading}
           />
 
           {/* Add Project Bar - Hidden if not Admin */}

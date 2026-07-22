@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip } from '@mantine/core';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
@@ -80,6 +80,7 @@ interface CalendarGridProps {
   onUpdateProjectsList: (newList: Project[]) => void;
   onSaveProjectsOrder: (orderedIds: string[]) => void;
   isAdmin: boolean;
+  loading?: boolean;
 }
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -99,6 +100,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onUpdateProjectsList,
   onSaveProjectsOrder,
   isAdmin,
+  loading = false,
 }) => {
   // Drag selection state
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
@@ -475,8 +477,16 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ref={provided.innerRef}
                 className="projects-rows-container"
               >
-                {visibleProjects.map((project, idx) => {
-                  const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border-color)', height: '80px' }}>
+                      <Skeleton height={50} width={180} radius="md" animate />
+                      <Skeleton height={50} style={{ flexGrow: 1 }} radius="md" animate />
+                    </div>
+                  ))
+                ) : (
+                  visibleProjects.map((project, idx) => {
+                    const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
                   const projectDesigners = projectMembers.filter((u) => u.isDesigner);
                   const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
                   const startOfWeekStr = formatDateString(days[0]);
@@ -747,7 +757,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     )}
                   </Draggable>
                 );
-              })}
+              })
+            )}
               {provided.placeholder}
             </div>
           );
