@@ -394,6 +394,7 @@ export const App: React.FC = () => {
             >
               <DesignerHeader
                 users={users}
+                projects={projects}
                 allocations={allocations}
                 days={weekDays}
                 designerCapacities={designerCapacities}
@@ -414,6 +415,7 @@ export const App: React.FC = () => {
           <div className="glass-panel">
             <DesignerHeader
               users={users}
+              projects={projects}
               allocations={allocations}
               days={weekDays}
               designerCapacities={designerCapacities}

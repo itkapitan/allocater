@@ -523,13 +523,20 @@ body {
   color: var(--text-muted);
 }
 
+.designer-controls-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .designer-capacity-control {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   background-color: #f8fafc;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: 8px;
   border: 1px dashed var(--border-color);
 }
@@ -538,13 +545,14 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .designer-capacity-input {
-  width: 50px;
+  width: 42px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 2px 6px;
+  padding: 2px 4px;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
@@ -554,6 +562,43 @@ body {
 .designer-capacity-input:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+.designer-projects-count-badge {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background-color: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.designer-projects-count-badge:hover {
+  background-color: #f1f5f9;
+  border-color: var(--primary-color);
+}
+
+.projects-count-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.projects-count-number {
+  font-size: 11px;
+  font-weight: 800;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 1px 6px;
+  border-radius: 20px;
+  min-width: 18px;
+  text-align: center;
 }
 
 /* Bottom add project trigger bar */

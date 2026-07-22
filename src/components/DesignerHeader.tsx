@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Group, Text, Button, ActionIcon, Progress, HoverCard, Table, Modal, TextInput, PasswordInput, Stack } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight, IconUsers, IconLogin, IconLogout, IconShield } from '@tabler/icons-react';
-import type { User, Allocation } from '../types';
+import type { User, Allocation, Project } from '../types';
 
 interface DesignerHeaderProps {
   users: User[];
+  projects: Project[];
   allocations: Allocation[];
   days: Date[];
   designerCapacities: Record<string, number>;
@@ -21,6 +22,7 @@ interface DesignerHeaderProps {
 
 export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   users,
+  projects,
   allocations,
   days,
   designerCapacities,
@@ -428,6 +430,38 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
             statusColor = 'indigo';
           }
 
+          // Compute projects and hours this designer is allocated to on this week
+          const activeProjects = projects.map((project) => {
+            let projectWeekHours = 0;
+            let hasOverlap = false;
+
+            days.forEach((day) => {
+              const dayStr = formatDateString(day);
+              const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+              if (isWeekend) return; // Skip weekend allocations to match system load calculation
+
+              allocations
+                .filter((a) => a.designerId === designer.id && a.projectId === project.id)
+                .forEach((alloc) => {
+                  const start = new Date(alloc.startDate);
+                  const end = new Date(alloc.endDate);
+                  const current = new Date(dayStr);
+
+                  if (current >= start && current <= end) {
+                    hasOverlap = true;
+                    const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    projectWeekHours += alloc.hours / durationDays;
+                  }
+                });
+            });
+
+            return {
+              project,
+              hours: Math.round(projectWeekHours * 10) / 10,
+              hasOverlap,
+            };
+          }).filter((ap) => ap.hasOverlap);
+
           const cardClass = designer.name.toLowerCase().includes('rodion')
             ? 'designer-card rodion'
             : designer.name.toLowerCase().includes('yevhen')
@@ -462,19 +496,80 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
                       </div>
                     </div>
 
-                    <div className="designer-capacity-control" onClick={(e) => e.stopPropagation()}>
-                      <label htmlFor={`cap-${designer.id}`}>Годин на дизайн:</label>
-                      <input
-                        id={`cap-${designer.id}`}
-                        type="number"
-                        className="designer-capacity-input"
-                        min="0"
-                        max="24"
-                        value={dailyCap}
-                        disabled={!isAdmin}
-                        onChange={(e) => onCapacityChange(designer.id, parseFloat(e.target.value) || 0)}
-                        style={{ cursor: isAdmin ? 'text' : 'not-allowed' }}
-                      />
+                    <div className="designer-controls-row" onClick={(e) => e.stopPropagation()}>
+                      <div className="designer-capacity-control">
+                        <label htmlFor={`cap-${designer.id}`}>На дизайн:</label>
+                        <input
+                          id={`cap-${designer.id}`}
+                          type="number"
+                          className="designer-capacity-input"
+                          min="0"
+                          max="24"
+                          value={dailyCap}
+                          disabled={!isAdmin}
+                          onChange={(e) => onCapacityChange(designer.id, parseFloat(e.target.value) || 0)}
+                          style={{ cursor: isAdmin ? 'text' : 'not-allowed' }}
+                        />
+                      </div>
+
+                      <HoverCard width={280} shadow="md" withArrow openDelay={100}>
+                        <HoverCard.Target>
+                          <div className="designer-projects-count-badge">
+                            <span className="projects-count-label">Проєкти:</span>
+                            <span className="projects-count-number">
+                              {activeProjects.length}
+                            </span>
+                          </div>
+                        </HoverCard.Target>
+                        <HoverCard.Dropdown style={{ padding: '12px', zIndex: 120 }}>
+                          <Stack gap="xs">
+                            <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.5px' }}>
+                              АКТИВНІ ПРОЄКТИ НА ЦЕЙ ТИЖДЕНЬ
+                            </Text>
+                            {activeProjects.length === 0 ? (
+                              <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+                                Немає активних проєктів
+                              </Text>
+                            ) : (
+                              <Table verticalSpacing="xs" horizontalSpacing="xs">
+                                <Table.Thead>
+                                  <Table.Tr>
+                                    <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Проєкт</Table.Th>
+                                    <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right' }}>Години</Table.Th>
+                                  </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                  {activeProjects.map(({ project, hours }) => (
+                                    <Table.Tr key={project.id}>
+                                      <Table.Td style={{ padding: '6px 8px' }}>
+                                        <Group gap="xs" wrap="nowrap">
+                                          <span
+                                            style={{
+                                              display: 'inline-block',
+                                              width: '8px',
+                                              height: '8px',
+                                              borderRadius: '50%',
+                                              backgroundColor: `var(--theme-${project.color}, ${project.color})`
+                                            }}
+                                          />
+                                          <Text size="xs" fw={600} style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
+                                            {project.name}
+                                          </Text>
+                                        </Group>
+                                      </Table.Td>
+                                      <Table.Td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                        <Text size="xs" fw={700} c="indigo">
+                                          {hours} год
+                                        </Text>
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  ))}
+                                </Table.Tbody>
+                              </Table>
+                            )}
+                          </Stack>
+                        </HoverCard.Dropdown>
+                      </HoverCard>
                     </div>
 
                     <div>
