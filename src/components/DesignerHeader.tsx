@@ -331,13 +331,10 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
       {/* Top Title & Navigation Row */}
       <Group justify="space-between" mb="xl">
         <Group gap="md">
-          <Text fw={800} size="xl" style={{ fontSize: '28px', fontFamily: 'var(--font-family)', color: 'var(--text-main)' }}>
+          <Text fw={800} size="xl" style={{ fontSize: '28px', fontFamily: 'var(--font-family)', color: 'var(--text-main)', marginRight: '8px' }}>
             {currentMonthYear}
           </Text>
-        </Group>
-
-        <Group gap="sm">
-          {/* Chevron Navigation Buttons with a 4px gap */}
+          {/* Chevron Navigation Buttons next to the title */}
           <Group gap={4}>
             <ActionIcon variant="light" color="indigo" size="lg" onClick={onPrevWeek} radius="md" title="Попередній тиждень">
               <IconChevronLeft size={18} />
@@ -346,7 +343,9 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
               <IconChevronRight size={18} />
             </ActionIcon>
           </Group>
+        </Group>
 
+        <Group gap="sm">
           <Button
             leftSection={<IconUsers size={16} />}
             color="indigo"
