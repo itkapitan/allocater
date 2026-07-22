@@ -116,12 +116,24 @@ body {
   height: 75px;
 }
 
+/* Project Rows Container for Drag and Drop */
+.projects-rows-container {
+  grid-column: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Project Row Details */
 .project-row {
-  display: contents; /* Allows grid items to align to parent calendar-grid-container */
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
 
 .project-info-cell {
+  width: 320px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   padding: 20px 24px;
   background-color: var(--panel-bg);
@@ -134,6 +146,36 @@ body {
 
 .project-row:hover .project-info-cell {
   background-color: #fafbfd;
+}
+
+/* Premium Dragging States */
+.project-row.is-dragging {
+  background-color: var(--panel-bg) !important;
+  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.15), 0 10px 10px -5px rgba(99, 102, 241, 0.1) !important;
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+  border-radius: 8px;
+  z-index: 9999;
+  transform: scale(1.005) !important;
+}
+
+.project-row.is-dragging .project-info-cell {
+  border-bottom: none !important;
+  border-radius: 8px 0 0 8px;
+  background-color: #fafbfd !important;
+}
+
+.project-row.is-dragging .calendar-days-cell {
+  border-bottom: none !important;
+  border-radius: 0 8px 8px 0;
+  background-color: #fafbfd !important;
+  border-left: none !important;
+}
+
+.project-row.is-dragging .project-drag-number {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
 }
 
 .project-title-container {
@@ -250,6 +292,9 @@ body {
 
 /* Calendar Columns Grid Cell */
 .calendar-days-cell {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
   border-left: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
   background-color: var(--panel-bg);

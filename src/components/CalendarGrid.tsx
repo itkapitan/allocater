@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical, IconExchange } from '@tabler/icons-react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
 
@@ -70,10 +71,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
   const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
-  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
-  const projectsRef = useRef(projects);
-  projectsRef.current = projects;
-
   const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
 
   // Formatter helper
@@ -222,6 +219,24 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleDragEnd = (result: any) => {
+    if (!result.destination) return;
+    const fromIdx = result.source.index;
+    const toIdx = result.destination.index;
+    if (fromIdx === toIdx) return;
+
+    const list = [...projects];
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+
+    // 1. Update React state immediately
+    onUpdateProjectsList(list);
+
+    // 2. Persist the final order to the backend DB
+    const orderedIds = list.map((p) => p.id);
+    onSaveProjectsOrder(orderedIds);
+  };
+
 
   const handleSingleClickCreate = (projectId: string, dayIdx: number) => {
     const project = projects.find((p) => p.id === projectId);
@@ -309,15 +324,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return names[dayIndex];
   };
 
-  // Helper to generate consistent colors for initials avatar
-  const getAvatarColor = (name: string) => {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 60%, 45%)`;
-  };
+
 
   return (
     <div className="calendar-grid-container">
@@ -343,297 +350,253 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           );
         })}
       </div>
-      {/* Grid Rows for each project */}
-      {projects.map((project, idx) => {
-        const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
-        const projectDesigners = projectMembers.filter((u) => u.isDesigner);
-        const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
-        const startOfWeekStr = formatDateString(days[0]);
-        const endOfWeekStr = formatDateString(days[days.length - 1]);
-
-        // Compute lanes for this project
-        const projectAllocations = allocations.filter((a) => {
-          return a.projectId === project.id &&
-                 a.startDate <= endOfWeekStr &&
-                 a.endDate >= startOfWeekStr;
-        });
-        const lanes = computeLanes(projectAllocations);
-
-        return (
-          <div className="project-row" key={project.id}>
-            {/* Left Cell: Project Name & Members */}
-            <div 
-              className="project-info-cell"
-              style={{
-                opacity: draggedIdx === idx ? 0.4 : 1,
-                transition: 'opacity 0.2s ease',
-              }}
-              onDragOver={(e) => {
-                if (isAdmin) e.preventDefault();
-              }}
-              onDragEnter={() => {
-                if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
-                  const list = [...projectsRef.current];
-                  const [moved] = list.splice(draggedIdx, 1);
-                  list.splice(idx, 0, moved);
-                  onUpdateProjectsList(list);
-                  setDraggedIdx(idx);
-                }
-              }}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="projects-list">
+          {(provided) => (
+            <div
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="projects-rows-container"
             >
-              <div className="project-title-container" style={{ display: 'flex', alignItems: 'center' }}>
-                <span
-                  style={{
-                    cursor: isAdmin ? 'ns-resize' : 'default',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                    marginRight: '8px',
-                    userSelect: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    backgroundColor: 'rgba(99, 102, 241, 0.08)',
-                    border: '1px solid rgba(99, 102, 241, 0.15)',
-                    transition: 'all 0.2s',
-                  }}
-                  draggable={isAdmin}
-                  onDragStart={(e) => {
-                    setDraggedIdx(idx);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragEnd={() => {
-                    setDraggedIdx(null);
-                    const orderedIds = projectsRef.current.map((p) => p.id);
-                    onSaveProjectsOrder(orderedIds);
-                  }}
-                  className="project-drag-number"
-                  title={isAdmin ? 'Перетягніть для зміни приоритету' : undefined}
-                >
-                  {idx + 1}
-                </span>
+              {projects.map((project, idx) => {
+                const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
+                const projectDesigners = projectMembers.filter((u) => u.isDesigner);
+                const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+                const startOfWeekStr = formatDateString(days[0]);
+                const endOfWeekStr = formatDateString(days[days.length - 1]);
 
-                <input
-                  type="text"
-                  className="project-name-input"
-                  value={project.name}
-                  onChange={(e) => onUpdateProjectName(project.id, e.target.value)}
-                  placeholder="Введіть назву проєкту"
-                  readOnly={!isAdmin}
-                  style={{
-                    cursor: isAdmin ? 'text' : 'default',
-                    background: 'transparent',
-                    flexGrow: 1,
-                  }}
-                />
-                
-                {isAdmin && (
-                  <Menu shadow="md" width={200} position="right-start">
-                    <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" size="sm">
-                        <IconDotsVertical size={16} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label>Керування проєктом</Menu.Label>
-                      <Menu.Item
-                        color="red"
-                        leftSection={<IconTrash size={14} />}
-                        onClick={() => onDeleteProject(project.id)}
-                      >
-                        Видалити проєкт
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                )}
-              </div>
+                // Compute lanes for this project
+                const projectAllocations = allocations.filter((a) => {
+                  return a.projectId === project.id &&
+                         a.startDate <= endOfWeekStr &&
+                         a.endDate >= startOfWeekStr;
+                });
+                const lanes = computeLanes(projectAllocations);
 
-              {/* Members list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {projectMembers.map((member) => (
-                  <Menu key={member.id} shadow="md" width={220} position="bottom-start" disabled={!isAdmin}>
-                    <Menu.Target>
+                return (
+                  <Draggable key={project.id} draggableId={project.id} index={idx} isDragDisabled={!isAdmin}>
+                    {(draggableProvided, snapshot) => (
                       <div
-                        className="project-member-item"
-                        title={isAdmin ? "Натисніть для зміни виконавця" : undefined}
-                        style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                        ref={draggableProvided.innerRef}
+                        {...draggableProvided.draggableProps}
+                        className={`project-row ${snapshot.isDragging ? 'is-dragging' : ''}`}
                       >
-                        {(() => {
-                          const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
-                          return (
-                            <div
-                              className="project-member-avatar"
+                        {/* Left Cell: Project Name & Members */}
+                        <div className="project-info-cell">
+                          <div className="project-title-container" style={{ display: 'flex', alignItems: 'center' }}>
+                            <span
+                              {...draggableProvided.dragHandleProps}
+                              className="project-drag-number"
+                              title={isAdmin ? 'Перетягніть для зміни приоритету' : undefined}
                               style={{
-                                backgroundColor: isBase64Image ? 'transparent' : getAvatarColor(member.name),
-                                backgroundImage: isBase64Image ? `url(${member.avatar})` : undefined,
+                                cursor: isAdmin ? 'ns-resize' : 'default',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                                marginRight: '8px',
+                                userSelect: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                                border: '1px solid rgba(99, 102, 241, 0.15)',
+                                transition: 'all 0.2s',
                               }}
                             >
-                              {!isBase64Image && member.avatar}
-                            </div>
-                          );
-                        })()}
-                        <div className="project-member-info">
-                          <span className="project-member-name">{member.name}</span>
-                          <span className="project-member-role">{member.role}</span>
+                              {idx + 1}
+                            </span>
+
+                            <input
+                              type="text"
+                              className="project-name-input"
+                              value={project.name}
+                              onChange={(e) => onUpdateProjectName(project.id, e.target.value)}
+                              placeholder="Введіть назву проєкту"
+                              readOnly={!isAdmin}
+                              style={{
+                                cursor: isAdmin ? 'text' : 'default',
+                                background: 'transparent',
+                                flexGrow: 1,
+                              }}
+                            />
+                            
+                            {isAdmin && (
+                              <Menu shadow="md" width={200} position="right-start">
+                                <Menu.Target>
+                                  <ActionIcon variant="subtle" color="gray" size="sm">
+                                    <IconDotsVertical size={16} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown>
+                                  <Menu.Label>Керування проєктом</Menu.Label>
+                                  <Menu.Item
+                                    color="red"
+                                    leftSection={<IconTrash size={14} />}
+                                    onClick={() => {
+                                      onDeleteProject(project.id);
+                                    }}
+                                  >
+                                    Видалити проєкт
+                                  </Menu.Item>
+                                </Menu.Dropdown>
+                              </Menu>
+                            )}
+                          </div>
+
+                          {/* Member List */}
+                          <div className="project-members" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '8px' }}>
+                            {projectMembers.map((member) => {
+                              const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
+                              return (
+                                <Menu key={member.id} shadow="md" width={220} trigger="click" disabled={!isAdmin}>
+                                  <Menu.Target>
+                                    <div
+                                      className="member-avatar-wrapper"
+                                      style={{
+                                        cursor: isAdmin ? 'pointer' : 'default',
+                                        position: 'relative'
+                                      }}
+                                    >
+                                      <Avatar
+                                        size="sm"
+                                        radius="xl"
+                                        color={member.isDesigner ? 'indigo' : 'gray'}
+                                        src={isBase64Image ? member.avatar : undefined}
+                                        title={member.name}
+                                      >
+                                        {!isBase64Image && member.avatar}
+                                      </Avatar>
+                                    </div>
+                                  </Menu.Target>
+                                  <Menu.Dropdown>
+                                    <Menu.Label>Замінити виконавця</Menu.Label>
+                                    {nonProjectUsers.length === 0 ? (
+                                      <Menu.Item disabled>Немає інших користувачів</Menu.Item>
+                                    ) : (
+                                      nonProjectUsers.map((u) => (
+                                        <Menu.Item
+                                          key={u.id}
+                                          leftSection={<IconExchange size={14} />}
+                                          onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
+                                        >
+                                          {u.name}
+                                        </Menu.Item>
+                                      ))
+                                    )}
+                                    <Menu.Divider />
+                                    <Menu.Item
+                                      color="red"
+                                      leftSection={<IconTrash size={14} />}
+                                      onClick={() => onRemoveProjectMember(project.id, member.id)}
+                                    >
+                                      Видалити з проєкту
+                                    </Menu.Item>
+                                  </Menu.Dropdown>
+                                </Menu>
+                              );
+                            })}
+
+                            {isAdmin && (
+                              <Menu shadow="md" width={220}>
+                                <Menu.Target>
+                                  <ActionIcon variant="light" color="indigo" radius="xl" size="sm">
+                                    <IconUserPlus size={14} />
+                                  </ActionIcon>
+                                </Menu.Target>
+                                <Menu.Dropdown style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                  <Menu.Label>Додати виконавця</Menu.Label>
+                                  {users.filter(u => !project.memberIds.includes(u.id)).length === 0 ? (
+                                    <Menu.Item disabled>Усі вже додані</Menu.Item>
+                                  ) : (
+                                    users
+                                      .filter(u => !project.memberIds.includes(u.id))
+                                      .map(u => (
+                                        <Menu.Item
+                                          key={u.id}
+                                          onClick={() => onAddProjectMember(project.id, u.id)}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {(() => {
+                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
+                                              return (
+                                                <Avatar
+                                                  size="xs"
+                                                  radius="xl"
+                                                  src={isBase64 ? u.avatar : undefined}
+                                                >
+                                                  {!isBase64 && u.avatar}
+                                                </Avatar>
+                                              );
+                                            })()}
+                                            <div>
+                                              <Text size="xs" fw={600}>{u.name}</Text>
+                                              <Text size="10px" c="dimmed">{u.role}</Text>
+                                            </div>
+                                          </div>
+                                        </Menu.Item>
+                                      ))
+                                  )}
+                                </Menu.Dropdown>
+                              </Menu>
+                            )}
+                          </div>
                         </div>
-                        
-                        {isAdmin && (
-                          <ActionIcon
-                            className="project-member-delete"
-                            size="xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemoveProjectMember(project.id, member.id);
-                            }}
-                            title="Видалити учасника"
-                          >
-                            <IconTrash size={12} />
-                          </ActionIcon>
-                        )}
+
+                        {/* Right Cell: Days Grid & Allocations overlay */}
+                        <div 
+                          className="calendar-days-cell"
+                          style={{ 
+                            minHeight: `${Math.max(140, lanes.length * 56 + 24)}px`,
+                          }}
+                        >
+                          {days.map((day, dIdx) => {
+                            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                            return (
+                              <div
+                                key={day.toISOString()}
+                                className={`day-grid-column ${isWeekend ? 'is-weekend' : ''}`}
+                                onMouseDown={(e) => handleCellMouseDown(e, project.id, dIdx)}
+                                style={{
+                                  cursor: isAdmin ? 'crosshair' : 'default',
+                                }}
+                              />
+                            );
+                          })}
+
+                          {/* Allocations layer */}
+                          <div className="allocations-overlay">
+                            {lanes.map((lane, laneIdx) => (
+                              <div key={laneIdx} className="allocation-lane">
+                                {lane.map((allocation) => (
+                                  <AllocationBar
+                                    key={allocation.id}
+                                    allocation={allocation}
+                                    project={project}
+                                    designers={projectDesigners}
+                                    days={days}
+                                    allocations={allocations}
+                                    designerCapacities={designerCapacities}
+                                    onUpdateAllocation={onUpdateAllocation}
+                                    onDeleteAllocation={onDeleteAllocation}
+                                    isAdmin={isAdmin}
+                                    isSelected={selectedAllocationIds.includes(allocation.id)}
+                                  />
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </Menu.Target>
-                    
-                    <Menu.Dropdown>
-                      <Menu.Label>Замінити виконавця "{member.name}"</Menu.Label>
-                      {users
-                        .filter((u) => u.id !== member.id)
-                        .map((u) => (
-                          <Menu.Item
-                            key={u.id}
-                            leftSection={<IconExchange size={14} />}
-                            onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {(() => {
-                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                return (
-                                  <Avatar size="xs" color="blue" radius="xl" src={isBase64Image ? u.avatar : undefined}>
-                                    {!isBase64Image && u.avatar}
-                                  </Avatar>
-                                );
-                              })()}
-                              <div>
-                                <Text size="xs" fw={600}>{u.name}</Text>
-                                <Text size="10px" c="dimmed">{u.role}</Text>
-                              </div>
-                            </div>
-                          </Menu.Item>
-                        ))}
-                    </Menu.Dropdown>
-                  </Menu>
-                ))}
-
-                {/* Add member button - Hidden if not Admin */}
-                {isAdmin && (
-                  <Menu shadow="md" width={220} position="right-start">
-                    <Menu.Target>
-                      <Button
-                        variant="subtle"
-                        color="indigo"
-                        size="xs"
-                        leftSection={<IconUserPlus size={14} />}
-                        styles={{ inner: { justifyContent: 'flex-start' } }}
-                        fullWidth
-                        mt="xs"
-                      >
-                        Додати учасника
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Label>Виберіть колегу</Menu.Label>
-                      {nonProjectUsers.length === 0 ? (
-                        <Menu.Item disabled>Всі колеги вже додані</Menu.Item>
-                      ) : (
-                        nonProjectUsers.map((u) => (
-                          <Menu.Item
-                            key={u.id}
-                            onClick={() => onAddProjectMember(project.id, u.id)}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {(() => {
-                                const isBase64Image = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                return (
-                                  <Avatar size="xs" color="indigo" radius="xl" src={isBase64Image ? u.avatar : undefined}>
-                                    {!isBase64Image && u.avatar}
-                                  </Avatar>
-                                );
-                              })()}
-                              <div>
-                                <Text size="xs" fw={600}>{u.name}</Text>
-                                <Text size="10px" c="dimmed">{u.role}</Text>
-                              </div>
-                            </div>
-                          </Menu.Item>
-                        ))
-                      )}
-                    </Menu.Dropdown>
-                  </Menu>
-                )}
-              </div>
-            </div>
-
-            {/* Right Cell: Days Grid & Allocations overlay */}
-            <div 
-              className="calendar-days-cell"
-              style={{ 
-                minHeight: `${Math.max(140, lanes.length * 56 + 24)}px`,
-                opacity: draggedIdx === idx ? 0.4 : 1,
-                transition: 'opacity 0.2s ease',
-              }}
-              onDragOver={(e) => {
-                if (isAdmin) e.preventDefault();
-              }}
-              onDragEnter={() => {
-                if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
-                  const list = [...projectsRef.current];
-                  const [moved] = list.splice(draggedIdx, 1);
-                  list.splice(idx, 0, moved);
-                  onUpdateProjectsList(list);
-                  setDraggedIdx(idx);
-                }
-              }}
-            >
-              {days.map((day, idx) => {
-                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`day-grid-column ${isWeekend ? 'is-weekend' : ''}`}
-                    onMouseDown={(e) => handleCellMouseDown(e, project.id, idx)}
-                    style={{
-                      cursor: isAdmin ? 'crosshair' : 'default',
-                    }}
-                  />
+                    )}
+                  </Draggable>
                 );
               })}
-
-              {/* Allocations layer */}
-              <div className="allocations-overlay">
-                {lanes.map((lane, laneIdx) => (
-                  <div key={laneIdx} className="allocation-lane">
-                    {lane.map((allocation) => (
-                      <AllocationBar
-                        key={allocation.id}
-                        allocation={allocation}
-                        project={project}
-                        designers={projectDesigners}
-                        days={days}
-                        allocations={allocations}
-                        designerCapacities={designerCapacities}
-                        onUpdateAllocation={onUpdateAllocation}
-                        onDeleteAllocation={onDeleteAllocation}
-                        isAdmin={isAdmin}
-                        isSelected={selectedAllocationIds.includes(allocation.id)}
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
+              {provided.placeholder}
             </div>
-          </div>
-        );
-      })}
+          )}
+        </Droppable>
+      </DragDropContext>
 
       {/* Floating Selection Box */}
       {selectionBox && (
