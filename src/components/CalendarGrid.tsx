@@ -479,12 +479,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               >
                 {loading ? (
                   Array.from({ length: 4 }).map((_, idx) => (
-                    <div key={idx} className="project-row" style={{ height: '112px' }}>
-                      <div className="project-info-cell" style={{ display: 'flex', flexDirection: 'column', gap: '12px', justifyContent: 'center' }}>
+                    <div key={idx} className="project-row" style={{ height: '140px' }}>
+                      <div className="project-info-cell" style={{ display: 'flex', flexDirection: 'column', gap: '12px', justifyContent: 'center', height: '140px' }}>
                         <Skeleton height={20} width="60%" radius="sm" animate />
                         <Skeleton height={28} width="40%" radius="xl" animate />
                       </div>
-                      <div style={{ flexGrow: 1, borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', padding: '0 24px' }}>
+                      <div style={{ flexGrow: 1, borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', padding: '0 24px', height: '140px' }}>
                         <Skeleton height={40} style={{ width: '100%' }} radius="md" animate />
                       </div>
                     </div>
