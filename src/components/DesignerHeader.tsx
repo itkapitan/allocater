@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Group, Text, Button, ActionIcon, Progress, HoverCard, Table, Modal, TextInput, PasswordInput, Stack } from '@mantine/core';
-import { IconChevronLeft, IconChevronRight, IconUsers, IconLogin, IconLogout, IconShield } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconUsers, IconLogin, IconLogout, IconShield, IconFolder } from '@tabler/icons-react';
 import type { User, Allocation, Project } from '../types';
 
 interface DesignerHeaderProps {
@@ -14,6 +14,7 @@ interface DesignerHeaderProps {
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onOpenManageUsers: () => void;
+  onOpenManageSpaces: () => void;
   isAdmin: boolean;
   onLogin: (email: string, pass: string) => Promise<boolean>;
   onLogout: () => void;
@@ -31,6 +32,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   onPrevWeek,
   onNextWeek,
   onOpenManageUsers,
+  onOpenManageSpaces,
   isAdmin,
   onLogin,
   onLogout,
@@ -346,6 +348,16 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
         </Group>
 
         <Group gap="sm">
+          <Button
+            leftSection={<IconFolder size={16} />}
+            color="indigo"
+            variant="outline"
+            radius="md"
+            onClick={onOpenManageSpaces}
+          >
+            Простір
+          </Button>
+
           <Button
             leftSection={<IconUsers size={16} />}
             color="indigo"

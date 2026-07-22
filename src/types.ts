@@ -12,6 +12,7 @@ export interface Project {
   name: string;
   color: string; // css color or mantine theme color (e.g. violet, blue, teal, orange, pink, cyan)
   memberIds: string[]; // list of user ids in this project
+  spaceId?: string;
 }
 
 export interface Allocation {
@@ -32,4 +33,10 @@ export interface DesignerCapacity {
 export interface WeekData {
   startOfWeek: Date; // Monday of the week
   days: Date[]; // Monday to Sunday (7 Date objects)
+}
+
+export interface Space {
+  id: string;
+  name: string;
+  memberIds: string[];
 }

@@ -1,16 +1,106 @@
 import React, { useState, useEffect } from 'react';
 import { MantineProvider, createTheme, Stack } from '@mantine/core';
-import type { User, Project, Allocation } from './types';
+import type { User, Project, Allocation, Space } from './types';
 import { DesignerHeader } from './components/DesignerHeader';
 import { CalendarGrid } from './components/CalendarGrid';
 import { AddProjectRow } from './components/AddProjectRow';
 import { ManageUsersDrawer } from './components/ManageUsersDrawer';
+import { ManageSpacesDrawer } from './components/ManageSpacesDrawer';
 
 // Custom theme mapping
 const theme = createTheme({
   fontFamily: 'var(--font-family)',
   primaryColor: 'indigo',
 });
+
+// Ukrainian Transliteration Helper
+const transliterate = (text: string): string => {
+  const cyrillicToLatin: Record<string, string> = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'ґ': 'g', 'д': 'd', 'е': 'e', 'є': 'ye', 'ж': 'zh', 'з': 'z',
+    'и': 'y', 'і': 'i', 'ї': 'yi', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p',
+    'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ь': '', 'ю': 'yu', 'я': 'ya',
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'H', 'Ґ': 'G', 'Д': 'D', 'Е': 'E', 'Є': 'Ye', 'Ж': 'Zh', 'З': 'Z',
+    'И': 'Y', 'І': 'I', 'Ї': 'Yi', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N', 'О': 'O', 'П': 'P',
+    'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U', 'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Shch',
+    'Ь': '', 'Ю': 'Yu', 'Я': 'Ya'
+  };
+  return text
+    .split('')
+    .map((char) => cyrillicToLatin[char] || char)
+    .join('')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
+// Date to URL slug helper (e.g. 20-24_Lypnia or 31_Serpnia-4_Veresnia)
+const getWeekUrlSlug = (start: Date): string => {
+  const daysList = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    daysList.push(d);
+  }
+  const monday = daysList[0];
+  const friday = daysList[4];
+
+  const monthsLatin = [
+    'Sichnia', 'Liutogo', 'Bereznia', 'Kvitnia', 'Travnia', 'Chervnia',
+    'Lypnia', 'Serpnia', 'Veresnia', 'Zhovtnia', 'Lystopada', 'Grudnia'
+  ];
+
+  const monDay = monday.getDate();
+  const monMonth = monday.getMonth();
+  const friDay = friday.getDate();
+  const friMonth = friday.getMonth();
+
+  if (monMonth !== friMonth) {
+    return `${monDay}_${monthsLatin[monMonth]}-${friDay}_${monthsLatin[friMonth]}`;
+  }
+  return `${monDay}-${friDay}_${monthsLatin[monMonth]}`;
+};
+
+// Parser of URL slugs
+const parseUrlState = (pathname: string) => {
+  const parts = pathname.split('/').filter(Boolean);
+  let parsedSpaceId: string | null = null;
+  let parsedWeekStart: Date | null = null;
+
+  if (parts.length >= 1) {
+    const spaceSlug = parts[0];
+    const match = spaceSlug.match(/^(\d+)/);
+    if (match) {
+      parsedSpaceId = match[1];
+    }
+  }
+
+  if (parts.length >= 2) {
+    const weekSlug = parts[1];
+    let foundDate: Date | null = null;
+    for (let y = 2025; y <= 2027; y++) {
+      const tempDate = new Date(`${y}-01-01T00:00:00`);
+      const day = tempDate.getDay();
+      const diff = tempDate.getDate() - day + (day === 0 ? -6 : 1);
+      tempDate.setDate(diff);
+
+      for (let w = 0; w < 54; w++) {
+        const slug = getWeekUrlSlug(tempDate);
+        if (slug.toLowerCase() === weekSlug.toLowerCase()) {
+          foundDate = new Date(tempDate);
+          break;
+        }
+        tempDate.setDate(tempDate.getDate() + 7);
+      }
+      if (foundDate) break;
+    }
+    if (foundDate) {
+      parsedWeekStart = foundDate;
+    }
+  }
+
+  return { parsedSpaceId, parsedWeekStart };
+};
 
 export const App: React.FC = () => {
   // --- Admin Authentication State ---
@@ -58,6 +148,11 @@ export const App: React.FC = () => {
   const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
   const [isSticky, setIsSticky] = useState(false);
 
+  // --- Spaces State ---
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [activeSpaceId, setActiveSpaceId] = useState<string>('1');
+  const [manageSpacesOpened, setManageSpacesOpened] = useState(false);
+
   useEffect(() => {
     const handleScroll = () => {
       const sy = window.scrollY;
@@ -80,6 +175,35 @@ export const App: React.FC = () => {
         setProjects(data.projects || []);
         setAllocations(data.allocations || []);
         setDesignerCapacities(data.capacities || {});
+        
+        const loadedSpaces = data.spaces || [];
+        setSpaces(loadedSpaces);
+
+        // Parse current URL
+        const { parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+
+        let targetSpaceId = '1';
+        if (parsedSpaceId && loadedSpaces.some((s: Space) => s.id === parsedSpaceId)) {
+          targetSpaceId = parsedSpaceId;
+        } else if (loadedSpaces.length > 0) {
+          targetSpaceId = loadedSpaces[0].id;
+        }
+
+        setActiveSpaceId(targetSpaceId);
+
+        if (parsedWeekStart) {
+          setWeekStart(parsedWeekStart);
+        }
+
+        // Auto format current path cleanly
+        const targetSpace = loadedSpaces.find((s: Space) => s.id === targetSpaceId) || loadedSpaces[0];
+        if (targetSpace) {
+          const start = parsedWeekStart || new Date('2026-07-20T00:00:00');
+          const spaceSlug = `${targetSpaceId}-${transliterate(targetSpace.name)}`;
+          const weekSlug = getWeekUrlSlug(start);
+          const newPath = `/${spaceSlug}/${weekSlug}`;
+          window.history.replaceState(null, '', newPath);
+        }
       })
       .catch((err) => console.error('Error fetching data from SQLite API:', err));
   }, []);
@@ -193,6 +317,13 @@ export const App: React.FC = () => {
     );
     // Remove their allocations locally
     setAllocations((prev) => prev.filter((a) => a.designerId !== userId));
+    // Remove their membership in spaces locally
+    setSpaces((prev) =>
+      prev.map((space) => ({
+        ...space,
+        memberIds: space.memberIds.filter((id) => id !== userId),
+      }))
+    );
 
     fetch(`/api/users/${userId}`, {
       method: 'DELETE',
@@ -313,7 +444,11 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateProjectsList = (newList: Project[]) => {
-    setProjects(newList);
+    setProjects((prev) => {
+      const otherSpacesProjects = prev.filter((p) => p.spaceId !== activeSpaceId);
+      const updatedList = newList.map(p => ({ ...p, spaceId: p.spaceId || activeSpaceId }));
+      return [...otherSpacesProjects, ...updatedList];
+    });
   };
 
   const handleSaveProjectsOrder = (orderedIds: string[]) => {
@@ -322,6 +457,48 @@ export const App: React.FC = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: orderedIds }),
     }).catch((err) => console.error('Error saving projects order:', err));
+  };
+
+  // --- Spaces CRUD Handlers ---
+  const handleAddSpace = (newSpaceData: Omit<Space, "id">) => {
+    if (!isAdmin) return;
+    const newId = String(Date.now());
+    const newSpace: Space = { id: newId, ...newSpaceData };
+    setSpaces((prev) => [...prev, newSpace]);
+
+    fetch('/api/spaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSpace),
+    }).catch((err) => console.error('Error adding space in SQLite:', err));
+  };
+
+  const handleEditSpace = (updatedSpace: Space) => {
+    if (!isAdmin) return;
+    setSpaces((prev) => prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s)));
+
+    fetch(`/api/spaces/${updatedSpace.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedSpace),
+    }).catch((err) => console.error('Error updating space in SQLite:', err));
+  };
+
+  const handleDeleteSpace = (spaceId: string) => {
+    if (!isAdmin) return;
+    setSpaces((prev) => prev.filter((s) => s.id !== spaceId));
+    
+    // Clean up projects and allocations locally
+    setProjects((prev) => prev.filter((p) => p.spaceId !== spaceId));
+    setAllocations((prev) => prev.filter((a) => !projects.some((p) => p.id === a.projectId && p.spaceId === spaceId)));
+    
+    fetch(`/api/spaces/${spaceId}`, {
+      method: 'DELETE',
+    }).catch((err) => console.error('Error deleting space in SQLite:', err));
+
+    if (activeSpaceId === spaceId) {
+      setActiveSpaceId('1');
+    }
   };
 
   // --- Allocations Event Handlers (SQLite Synced) ---
@@ -379,7 +556,7 @@ export const App: React.FC = () => {
   const handleAddProject = (name: string, color: string, memberIds: string[]) => {
     if (!isAdmin) return;
     const newId = `p-${Date.now()}`;
-    const newProj: Project = { id: newId, name, color, memberIds };
+    const newProj: Project = { id: newId, name, color, memberIds, spaceId: activeSpaceId };
     setProjects((prev) => [...prev, newProj]);
 
     fetch('/api/projects', {
@@ -388,6 +565,11 @@ export const App: React.FC = () => {
       body: JSON.stringify(newProj),
     }).catch((err) => console.error('Error adding project in SQLite:', err));
   };
+
+  const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
+  const spaceUsers = users.filter((u) => activeSpace?.memberIds.includes(u.id));
+  const spaceProjects = projects.filter((p) => p.spaceId === activeSpaceId);
+  const spaceAllocations = allocations.filter((a) => spaceProjects.some((p) => p.id === a.projectId));
 
   return (
     <MantineProvider theme={theme}>
@@ -414,9 +596,9 @@ export const App: React.FC = () => {
               }}
             >
               <DesignerHeader
-                users={users}
-                projects={projects}
-                allocations={allocations}
+                users={spaceUsers}
+                projects={spaceProjects}
+                allocations={spaceAllocations}
                 days={weekDays}
                 designerCapacities={designerCapacities}
                 onCapacityChange={handleCapacityChange}
@@ -424,6 +606,7 @@ export const App: React.FC = () => {
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
                 onOpenManageUsers={() => setDrawerOpened(true)}
+                onOpenManageSpaces={() => setManageSpacesOpened(true)}
                 isAdmin={isAdmin}
                 onLogin={handleLogin}
                 onLogout={handleLogout}
@@ -435,9 +618,9 @@ export const App: React.FC = () => {
           {/* Normal Dashboard Header (Always static in the document flow) */}
           <div className="glass-panel">
             <DesignerHeader
-              users={users}
-              projects={projects}
-              allocations={allocations}
+              users={spaceUsers}
+              projects={spaceProjects}
+              allocations={spaceAllocations}
               days={weekDays}
               designerCapacities={designerCapacities}
               onCapacityChange={handleCapacityChange}
@@ -445,6 +628,7 @@ export const App: React.FC = () => {
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
               onOpenManageUsers={() => setDrawerOpened(true)}
+              onOpenManageSpaces={() => setManageSpacesOpened(true)}
               isAdmin={isAdmin}
               onLogin={handleLogin}
               onLogout={handleLogout}
@@ -454,9 +638,9 @@ export const App: React.FC = () => {
 
           {/* Interactive Planner Grid */}
           <CalendarGrid
-            users={users}
-            projects={projects}
-            allocations={allocations}
+            users={spaceUsers}
+            projects={spaceProjects}
+            allocations={spaceAllocations}
             days={weekDays}
             designerCapacities={designerCapacities}
             onUpdateProjectName={handleUpdateProjectName}
@@ -474,7 +658,7 @@ export const App: React.FC = () => {
 
           {/* Add Project Bar - Hidden if not Admin */}
           {isAdmin && (
-            <AddProjectRow users={users} onAddProject={handleAddProject} />
+            <AddProjectRow users={spaceUsers} onAddProject={handleAddProject} />
           )}
         </Stack>
 
@@ -486,6 +670,20 @@ export const App: React.FC = () => {
           onAddUser={handleAddUser}
           onEditUser={handleEditUser}
           onDeleteUser={handleDeleteUser}
+          isAdmin={isAdmin}
+        />
+
+        {/* Spaces Management Drawer */}
+        <ManageSpacesDrawer
+          opened={manageSpacesOpened}
+          onClose={() => setManageSpacesOpened(false)}
+          users={users}
+          spaces={spaces}
+          activeSpaceId={activeSpaceId}
+          onSelectSpace={(id) => setActiveSpaceId(id)}
+          onAddSpace={handleAddSpace}
+          onEditSpace={handleEditSpace}
+          onDeleteSpace={handleDeleteSpace}
           isAdmin={isAdmin}
         />
       </div>

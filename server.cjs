@@ -127,6 +127,12 @@ async function initializeDb() {
       // Ignored if column already exists
     }
 
+    try {
+      await executeQuery(`ALTER TABLE projects ADD COLUMN spaceId TEXT`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
+
     await executeQuery(`CREATE TABLE IF NOT EXISTS allocations (
       id TEXT PRIMARY KEY,
       projectId TEXT,
@@ -146,6 +152,12 @@ async function initializeDb() {
     await executeQuery(`CREATE TABLE IF NOT EXISTS capacities (
       designerId TEXT PRIMARY KEY,
       dailyCapacity REAL
+    )`);
+
+    await executeQuery(`CREATE TABLE IF NOT EXISTS spaces (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      memberIds TEXT
     )`);
 
     // Check and seed users if empty
@@ -198,6 +210,24 @@ async function initializeDb() {
           [c.designerId, c.dailyCapacity]
         );
       }
+    }
+
+    // Check and seed default space if empty
+    const spaceRows = await executeQuery('SELECT COUNT(*) as count FROM spaces');
+    const spaceCount = spaceRows && spaceRows[0] ? parseInt(spaceRows[0].count || spaceRows[0].COUNT || Object.values(spaceRows[0])[0] || 0, 10) : 0;
+    if (spaceCount === 0) {
+      console.log('Seeding initial space...');
+      // Get all current user IDs
+      const allUsers = await executeQuery('SELECT id FROM users');
+      const allUserIds = allUsers.map((u) => u.id);
+      
+      await executeQuery(
+        'INSERT INTO spaces (id, name, memberIds) VALUES (?, ?, ?)',
+        ['1', 'Дизайнери', JSON.stringify(allUserIds)]
+      );
+      
+      // Associate all existing projects with the default space
+      await executeQuery("UPDATE projects SET spaceId = '1' WHERE spaceId IS NULL OR spaceId = ''");
     }
   } catch (err) {
     console.error('Error initializing database:', err);
@@ -270,13 +300,13 @@ async function saveAvatarFile(id, avatar) {
 
 // --- API Router Endpoints ---
 
-// Get all planner data
 app.get('/api/data', async (req, res) => {
   try {
     const rawUsers = await executeQuery('SELECT * FROM users');
     const rawProjects = await executeQuery('SELECT * FROM projects ORDER BY sortOrder ASC, id ASC');
     const rawAllocations = await executeQuery('SELECT * FROM allocations');
     const rawCapacities = await executeQuery('SELECT * FROM capacities');
+    const rawSpaces = await executeQuery('SELECT * FROM spaces');
 
     // Parse structures
     const users = rawUsers.map((u) => ({
@@ -286,7 +316,14 @@ app.get('/api/data', async (req, res) => {
 
     const projects = rawProjects.map((p) => ({
       ...p,
-      memberIds: JSON.parse(p.memberids || p.memberIds || '[]')
+      memberIds: JSON.parse(p.memberids || p.memberIds || '[]'),
+      spaceId: p.spaceid || p.spaceId || '1'
+    }));
+
+    const spaces = rawSpaces.map((s) => ({
+      id: s.id,
+      name: s.name,
+      memberIds: JSON.parse(s.memberids || s.memberIds || '[]')
     }));
 
     const capacities = {};
@@ -297,6 +334,7 @@ app.get('/api/data', async (req, res) => {
     res.json({
       users,
       projects,
+      spaces,
       allocations: rawAllocations.map(a => ({
         id: a.id,
         projectId: a.projectid || a.projectId,
@@ -374,7 +412,7 @@ app.delete('/api/users/:id', async (req, res) => {
 
 // Project CRUD
 app.post('/api/projects', async (req, res) => {
-  const { id, name, color, memberIds } = req.body;
+  const { id, name, color, memberIds, spaceId } = req.body;
   try {
     const maxRow = await executeQuery('SELECT MAX(sortOrder) as maxSort FROM projects');
     let maxSort = 0;
@@ -387,10 +425,60 @@ app.post('/api/projects', async (req, res) => {
     const newSortOrder = maxSort + 1;
 
     await executeQuery(
-      'INSERT INTO projects (id, name, color, memberIds, sortOrder) VALUES (?, ?, ?, ?, ?)',
-      [id, name, color, JSON.stringify(memberIds), newSortOrder]
+      'INSERT INTO projects (id, name, color, memberIds, sortOrder, spaceId) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, name, color, JSON.stringify(memberIds), newSortOrder, spaceId || '1']
     );
     res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Spaces CRUD
+app.post('/api/spaces', async (req, res) => {
+  const { id, name, memberIds } = req.body;
+  try {
+    await executeQuery(
+      'INSERT INTO spaces (id, name, memberIds) VALUES (?, ?, ?)',
+      [id, name, JSON.stringify(memberIds)]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/spaces/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, memberIds } = req.body;
+  try {
+    await executeQuery(
+      'UPDATE spaces SET name = ?, memberIds = ? WHERE id = ?',
+      [name, JSON.stringify(memberIds), id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/spaces/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // 1. Get all projects in this space
+    const projs = await executeQuery('SELECT id FROM projects WHERE spaceId = ?', [id]);
+    if (projs && projs.length > 0) {
+      const projIds = projs.map(p => p.id);
+      // 2. Delete allocations of these projects
+      for (const pid of projIds) {
+        await executeQuery('DELETE FROM allocations WHERE projectId = ?', [pid]);
+      }
+      // 3. Delete projects
+      await executeQuery('DELETE FROM projects WHERE spaceId = ?', [id]);
+    }
+    // 4. Delete the space
+    await executeQuery('DELETE FROM spaces WHERE id = ?', [id]);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

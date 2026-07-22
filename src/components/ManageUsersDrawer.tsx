@@ -10,13 +10,12 @@ import {
   Card,
   ActionIcon,
   Divider,
-  Badge,
   FileInput,
+  Modal,
 } from "@mantine/core";
 import {
   IconTrash,
   IconUserPlus,
-  IconLock,
   IconUpload,
   IconPencil,
   IconX,
@@ -60,9 +59,7 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
 
   // Edit mode state
   const [editingUser, setEditingUser] = useState<User | null>(null);
-
-  // Core designers that should not be deleted to keep system calculations stable
-  const coreDesignerIds = ["1", "2", "3"];
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
   const handleFileChange = (file: File | null) => {
     setAvatarFile(file);
@@ -224,14 +221,14 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
                   accept="image/*"
                 />
                 <Checkbox
-                  label="Це дизайнер (буде враховуватися в розподілі годин)"
+                  label="Враховувати розподіл годин для цього користувача"
                   checked={isDesigner}
                   onChange={(e) => setIsDesigner(e.currentTarget.checked)}
                   mt="xs"
                 />
                 {isDesigner && (
                   <div>
-                    <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Колір дизайнера (для таймлайну)</Text>
+                    <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Колір користувача (для таймлайну)</Text>
                     <Group gap="xs">
                       {colorOptions.map((opt) => (
                         <div
@@ -293,7 +290,6 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
           }}
         >
           {users.map((user) => {
-            const isCore = coreDesignerIds.includes(user.id);
             const isBase64Image =
               user.avatar &&
               (user.avatar.startsWith("data:image/") ||
@@ -355,11 +351,19 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
                     </div>
                   </Group>
 
-                  <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+                  <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0, alignItems: 'center' }}>
                     {user.isDesigner && (
-                      <Badge color={user.color || "indigo"} variant="light" size="sm">
-                        Дизайнер
-                      </Badge>
+                      <div
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          backgroundColor: colorOptions.find((c) => c.value === user.color)?.hex || '#6366f1',
+                          border: '1.5px solid var(--border-color)',
+                          boxShadow: '0 0 0 1.5px rgba(99, 102, 241, 0.15)',
+                        }}
+                        title="Враховується в розподілі годин"
+                      />
                     )}
 
                     {isAdmin && (
@@ -373,25 +377,14 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
                           <IconPencil size={16} />
                         </ActionIcon>
 
-                        {isCore ? (
-                          <ActionIcon
-                            variant="light"
-                            color="gray"
-                            disabled
-                            title="Ключовий дизайнер (не можна видалити)"
-                          >
-                            <IconLock size={16} />
-                          </ActionIcon>
-                        ) : (
-                          <ActionIcon
-                            variant="light"
-                            color="red"
-                            onClick={() => onDeleteUser(user.id)}
-                            title="Видалити з команди"
-                          >
-                            <IconTrash size={16} />
-                          </ActionIcon>
-                        )}
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          onClick={() => setUserToDelete(user)}
+                          title="Видалити з команди"
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
                       </>
                     )}
                   </Group>
@@ -401,6 +394,43 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
           })}
         </Stack>
       </Stack>
+
+      {/* Confirm Delete Modal */}
+      <Modal
+        opened={userToDelete !== null}
+        onClose={() => setUserToDelete(null)}
+        title={
+          <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
+            Підтвердження видалення
+          </Text>
+        }
+        centered
+        radius="md"
+        size="sm"
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            Ви впевнені, що хочете видалити користувача <strong>{userToDelete?.name}</strong>?
+            Це безповоротно видалить усі його розподілені години та згадки у проектах.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="subtle" color="gray" onClick={() => setUserToDelete(null)}>
+              Скасувати
+            </Button>
+            <Button
+              color="red"
+              onClick={() => {
+                if (userToDelete) {
+                  onDeleteUser(userToDelete.id);
+                  setUserToDelete(null);
+                }
+              }}
+            >
+              Видалити
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Drawer>
   );
 };
