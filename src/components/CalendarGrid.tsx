@@ -229,12 +229,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const [moved] = list.splice(fromIdx, 1);
     list.splice(toIdx, 0, moved);
 
-    // 1. Update React state immediately
-    onUpdateProjectsList(list);
-
-    // 2. Persist the final order to the backend DB
+    // 1. Persist the final order to the backend DB instantly
     const orderedIds = list.map((p) => p.id);
     onSaveProjectsOrder(orderedIds);
+
+    // 2. Defer React state update to allow @hello-pangea/dnd to safely finish its drop transition
+    requestAnimationFrame(() => {
+      onUpdateProjectsList(list);
+    });
   };
 
 
