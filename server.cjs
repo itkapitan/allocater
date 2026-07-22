@@ -376,9 +376,19 @@ app.delete('/api/users/:id', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   const { id, name, color, memberIds } = req.body;
   try {
+    const maxRow = await executeQuery('SELECT MAX(sortOrder) as maxSort FROM projects');
+    let maxSort = 0;
+    if (maxRow && maxRow[0]) {
+      const val = maxRow[0].maxsort !== undefined ? maxRow[0].maxsort : maxRow[0].maxSort;
+      if (val !== null && val !== undefined) {
+        maxSort = Number(val);
+      }
+    }
+    const newSortOrder = maxSort + 1;
+
     await executeQuery(
-      'INSERT INTO projects (id, name, color, memberIds) VALUES (?, ?, ?, ?)',
-      [id, name, color, JSON.stringify(memberIds)]
+      'INSERT INTO projects (id, name, color, memberIds, sortOrder) VALUES (?, ?, ?, ?, ?)',
+      [id, name, color, JSON.stringify(memberIds), newSortOrder]
     );
     res.status(201).json({ id });
   } catch (err) {
