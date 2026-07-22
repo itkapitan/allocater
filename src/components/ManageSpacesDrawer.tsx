@@ -344,7 +344,7 @@ export const ManageSpacesDrawer: React.FC<ManageSpacesDrawerProps> = ({
               />
 
               {/* Scrollable list of members */}
-              <ScrollArea style={{ flexGrow: 1, border: "1px solid var(--border-color)", borderRadius: "8px", padding: "8px" }} offsetScrollbars>
+              <ScrollArea style={{ flexGrow: 1 }} offsetScrollbars>
                 <Stack gap="xs">
                   {filteredUsers.map((user) => {
                     const isBase64Image =
