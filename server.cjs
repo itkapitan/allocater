@@ -386,6 +386,23 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
+// Update projects sort order
+app.put('/api/projects/order', async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: 'Некоректні IDs' });
+  }
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      await executeQuery('UPDATE projects SET sortOrder = ? WHERE id = ?', [i, ids[i]]);
+    }
+    res.json({ success: true, message: 'Порядок проектів успішно збережено' });
+  } catch (err) {
+    console.error('Error updating projects order:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
   const { name, color, memberIds } = req.body;
@@ -637,40 +654,7 @@ app.post('/api/migrate-from-sqlite', async (req, res) => {
   }
 });
 
-// Update projects sort order
-app.put('/api/projects/order', async (req, res) => {
-  const { ids } = req.body;
-  console.log('PUT /api/projects/order - received ids:', ids);
-  if (!ids || !Array.isArray(ids)) {
-    return res.status(400).json({ error: 'Некоректні IDs' });
-  }
-  try {
-    for (let i = 0; i < ids.length; i++) {
-      const q = 'UPDATE projects SET sortOrder = ? WHERE id = ?';
-      const params = [i, ids[i]];
-      console.log(`Executing query inside loop: sql="${q}", params=${JSON.stringify(params)}`);
-      await executeQuery(q, params);
-    }
-    res.json({ success: true, message: 'Порядок проектів успішно збережено' });
-  } catch (err) {
-    console.error('Error updating projects order:', err);
-    res.status(500).json({ error: `${err.message} (while updating ${JSON.stringify(ids)})` });
-  }
-});
 
-// Admin SQL execution endpoint
-app.post('/api/run-sql', async (req, res) => {
-  const { email, password, sql, params } = req.body;
-  if (email !== 'radvancor@gmail.com' || password !== '80938093r') {
-    return res.status(401).json({ error: 'Невірні адмін-дані' });
-  }
-  try {
-    const result = await executeQuery(sql, params || []);
-    res.json({ success: true, result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Start Express Server
 app.listen(PORT, () => {
