@@ -640,17 +640,21 @@ app.post('/api/migrate-from-sqlite', async (req, res) => {
 // Update projects sort order
 app.put('/api/projects/order', async (req, res) => {
   const { ids } = req.body;
+  console.log('PUT /api/projects/order - received ids:', ids);
   if (!ids || !Array.isArray(ids)) {
     return res.status(400).json({ error: 'Некоректні IDs' });
   }
   try {
     for (let i = 0; i < ids.length; i++) {
-      await executeQuery('UPDATE projects SET sortOrder = ? WHERE id = ?', [i, ids[i]]);
+      const q = 'UPDATE projects SET sortOrder = ? WHERE id = ?';
+      const params = [i, ids[i]];
+      console.log(`Executing query inside loop: sql="${q}", params=${JSON.stringify(params)}`);
+      await executeQuery(q, params);
     }
     res.json({ success: true, message: 'Порядок проектів успішно збережено' });
   } catch (err) {
     console.error('Error updating projects order:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: `${err.message} (while updating ${JSON.stringify(ids)})` });
   }
 });
 
