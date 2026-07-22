@@ -115,16 +115,37 @@ export const App: React.FC = () => {
     setWeekStart(next);
   };
 
-  // Format month and year in Ukrainian (based on the Tuesday of the week to align with July 21 standard)
+  // Format week month and year in Ukrainian (showing working days Monday-Friday dates)
   const getMonthYearLabel = (daysList: Date[]) => {
-    const targetDate = daysList[1] || daysList[0]; // Tuesday or Monday
-    const monthIndex = targetDate.getMonth();
-    const year = targetDate.getFullYear();
-    const monthsUa = [
-      'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
-      'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+    if (daysList.length < 5) return '';
+    const monday = daysList[0];
+    const friday = daysList[4];
+
+    const monthsUaGenitive = [
+      'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+      'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
     ];
-    return `${monthsUa[monthIndex]} ${year}`;
+
+    const monDay = monday.getDate();
+    const monMonth = monday.getMonth();
+    const monYear = monday.getFullYear();
+
+    const friDay = friday.getDate();
+    const friMonth = friday.getMonth();
+    const friYear = friday.getFullYear();
+
+    if (monYear !== friYear) {
+      // Case 3: Different years
+      return `${monDay} ${monthsUaGenitive[monMonth]} ${monYear} - ${friDay} ${monthsUaGenitive[friMonth]} ${friYear}`;
+    }
+
+    if (monMonth !== friMonth) {
+      // Case 2: Different months, same year
+      return `${monDay} ${monthsUaGenitive[monMonth]} - ${friDay} ${monthsUaGenitive[friMonth]} ${monYear}`;
+    }
+
+    // Case 1: Same month, same year
+    return `${monDay}-${friDay} ${monthsUaGenitive[monMonth]} ${monYear}`;
   };
 
   // --- User Management Handlers (SQLite Synced) ---
