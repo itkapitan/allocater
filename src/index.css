@@ -128,7 +128,7 @@ body {
   display: flex;
   flex-direction: row;
   width: 100%;
-  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .project-info-cell {
@@ -151,23 +151,22 @@ body {
 /* Premium Dragging States */
 .project-row.is-dragging {
   background-color: var(--panel-bg) !important;
-  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.15), 0 10px 10px -5px rgba(99, 102, 241, 0.1) !important;
-  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.2), 0 10px 10px -5px rgba(99, 102, 241, 0.15) !important;
+  border: 1.5px solid var(--primary-color) !important;
   border-radius: 8px;
   z-index: 9999;
-  scale: 1.005;
+  scale: 1.01;
   transition: none !important;
+  overflow: hidden;
 }
 
 .project-row.is-dragging .project-info-cell {
   border-bottom: none !important;
-  border-radius: 8px 0 0 8px;
   background-color: #fafbfd !important;
 }
 
 .project-row.is-dragging .calendar-days-cell {
   border-bottom: none !important;
-  border-radius: 0 8px 8px 0;
   background-color: #fafbfd !important;
   border-left: none !important;
 }
