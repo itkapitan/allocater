@@ -23,6 +23,18 @@
       "dest": "/assets/$1"
     },
     {
+      "src": "/avatars/(.*)",
+      "dest": "/avatars/$1"
+    },
+    {
+      "src": "/favicon.svg",
+      "dest": "/favicon.svg"
+    },
+    {
+      "src": "/icon.svg",
+      "dest": "/icon.svg"
+    },
+    {
       "src": "/favicon.ico",
       "dest": "/favicon.ico"
     },

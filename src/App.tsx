@@ -166,6 +166,25 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // --- Calendar Navigation ---
+  // Default current week starts on Monday, July 20, 2026
+  const [weekStart, setWeekStart] = useState<Date>(() => {
+    const defaultDate = new Date('2026-07-20T00:00:00');
+    return defaultDate;
+  });
+
+  const getWeekDays = (start: Date) => {
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(start);
+      day.setDate(start.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
+
+  const weekDays = getWeekDays(weekStart);
+
   // Fetch initial data from SQLite Express Backend
   useEffect(() => {
     fetch('/api/data')
@@ -208,24 +227,35 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Error fetching data from SQLite API:', err));
   }, []);
 
-  // --- Calendar Navigation ---
-  // Default current week starts on Monday, July 20, 2026
-  const [weekStart, setWeekStart] = useState<Date>(() => {
-    const defaultDate = new Date('2026-07-20T00:00:00');
-    return defaultDate;
-  });
+  // Sync state changes to address bar URL
+  useEffect(() => {
+    if (spaces.length === 0) return;
+    const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
+    if (!activeSpace) return;
 
-  const getWeekDays = (start: Date) => {
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(start);
-      day.setDate(start.getDate() + i);
-      days.push(day);
+    const spaceSlug = `${activeSpace.id}-${transliterate(activeSpace.name)}`;
+    const weekSlug = getWeekUrlSlug(weekStart);
+    const newPath = `/${spaceSlug}/${weekSlug}`;
+
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, '', newPath);
     }
-    return days;
-  };
+  }, [activeSpaceId, weekStart, spaces]);
 
-  const weekDays = getWeekDays(weekStart);
+  // Sync history state navigation (popstate) back to React states
+  useEffect(() => {
+    const handlePopState = () => {
+      const { parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+      if (parsedSpaceId && spaces.some((s) => s.id === parsedSpaceId)) {
+        setActiveSpaceId(parsedSpaceId);
+      }
+      if (parsedWeekStart) {
+        setWeekStart(parsedWeekStart);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [spaces]);
 
   const handlePrevWeek = () => {
     const prev = new Date(weekStart);
