@@ -138,6 +138,31 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return () => clearInterval(interval);
   }, [days]);
 
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (selectedAllocationIds.length === 0) return;
+      const target = e.target as HTMLElement;
+
+      // Do not clear selection if clicking inside capsules, actions bar, modals, popovers or dropdowns
+      if (
+        target.closest('.allocation-capsule') ||
+        target.closest('.selection-actions-bar') ||
+        target.closest('.mantine-Popover-dropdown') ||
+        target.closest('.mantine-Menu-dropdown') ||
+        target.closest('.mantine-Modal-content')
+      ) {
+        return;
+      }
+
+      setSelectedAllocationIds([]);
+    };
+
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [selectedAllocationIds]);
+
   // Handle drag-selection and click-to-create
   const handleCellMouseDown = (e: React.MouseEvent, projectId: string, dayIdx: number) => {
     if (e.button !== 0 || !isAdmin) return;
@@ -163,6 +188,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     // Viewport-based coordinates (safe for scrolling)
     const startX = Math.max(minX, Math.min(maxX, e.clientX));
     const startY = e.clientY;
+    const initialScrollY = window.scrollY; // Track page scroll at click time
 
     selectionStartRef.current = {
       x: startX,
@@ -189,6 +215,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     const updateSelection = () => {
       const currentGridRect = gridContainer.getBoundingClientRect();
+      const scrollDelta = window.scrollY - initialScrollY;
 
       // Viewport-relative current coordinates
       const vpCurrentX = Math.max(minX, Math.min(maxX, currentMouseXRef.current));
@@ -198,6 +225,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       const gridCurrentX = vpCurrentX - currentGridRect.left;
       const gridCurrentY = vpCurrentY - currentGridRect.top;
 
+      // Adjust the startY viewport coordinate by the scroll delta
+      const vpStartY = startY - scrollDelta;
+
       setSelectionBox((box) => {
         if (!box) return null;
         return { ...box, currentX: gridCurrentX, currentY: gridCurrentY };
@@ -206,9 +236,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       // Viewport-relative boundary rect for intersection check
       const boxRect = {
         left: Math.min(startX, vpCurrentX),
-        top: Math.min(startY, vpCurrentY),
+        top: Math.min(vpStartY, vpCurrentY),
         right: Math.max(startX, vpCurrentX),
-        bottom: Math.max(startY, vpCurrentY),
+        bottom: Math.max(vpStartY, vpCurrentY),
       };
 
       const selectedIds: string[] = [];
