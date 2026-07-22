@@ -171,11 +171,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       dayIdx,
     };
 
+    // Grid-relative starting point (for rendering inside position:relative grid)
+    const gridStartX = startX - gridRect.left;
+    const gridStartY = startY - gridRect.top;
+
     setSelectionBox({
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
+      startX: gridStartX,
+      startY: gridStartY,
+      currentX: gridStartX,
+      currentY: gridStartY,
     });
 
     setSelectedAllocationIds([]);
@@ -184,19 +188,27 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const currentMouseYRef = { current: startY };
 
     const updateSelection = () => {
-      const currentX = Math.max(minX, Math.min(maxX, currentMouseXRef.current));
-      const currentY = Math.max(0, Math.min(window.innerHeight, currentMouseYRef.current));
+      const currentGridRect = gridContainer.getBoundingClientRect();
+
+      // Viewport-relative current coordinates
+      const vpCurrentX = Math.max(minX, Math.min(maxX, currentMouseXRef.current));
+      const vpCurrentY = Math.max(0, Math.min(window.innerHeight, currentMouseYRef.current));
+
+      // Grid-relative current coordinates (for rendering styles)
+      const gridCurrentX = vpCurrentX - currentGridRect.left;
+      const gridCurrentY = vpCurrentY - currentGridRect.top;
 
       setSelectionBox((box) => {
         if (!box) return null;
-        return { ...box, currentX, currentY };
+        return { ...box, currentX: gridCurrentX, currentY: gridCurrentY };
       });
 
+      // Viewport-relative boundary rect for intersection check
       const boxRect = {
-        left: Math.min(startX, currentX),
-        top: Math.min(startY, currentY),
-        right: Math.max(startX, currentX),
-        bottom: Math.max(startY, currentY),
+        left: Math.min(startX, vpCurrentX),
+        top: Math.min(startY, vpCurrentY),
+        right: Math.max(startX, vpCurrentX),
+        bottom: Math.max(startY, vpCurrentY),
       };
 
       const selectedIds: string[] = [];
@@ -512,20 +524,19 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             {projectMembers.map((member) => {
                               const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
                               return (
-                                <Tooltip
-                                  key={member.id}
-                                  label={
-                                    <div style={{ padding: '2px 4px' }}>
-                                      <Text size="xs" fw={700} c="white">{member.name}</Text>
-                                      <Text size="10px" style={{ color: '#cbd5e1' }}>{member.role}</Text>
-                                    </div>
-                                  }
-                                  position="top"
-                                  withArrow
-                                  multiline
-                                >
-                                  <Menu shadow="md" width={220} trigger="click" disabled={!isAdmin}>
-                                    <Menu.Target>
+                                <Menu key={member.id} shadow="md" width={220} trigger="click" disabled={!isAdmin}>
+                                  <Menu.Target>
+                                    <Tooltip
+                                      label={
+                                        <div style={{ padding: '2px 4px' }}>
+                                          <Text size="xs" fw={700} c="white">{member.name}</Text>
+                                          <Text size="10px" style={{ color: '#cbd5e1' }}>{member.role}</Text>
+                                        </div>
+                                      }
+                                      position="top"
+                                      withArrow
+                                      multiline
+                                    >
                                       <div
                                         className="member-avatar-wrapper"
                                         style={{
@@ -543,49 +554,49 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                           {!isBase64Image && member.avatar}
                                         </Avatar>
                                       </div>
-                                    </Menu.Target>
-                                    <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                                      <Menu.Label>Замінити виконавця</Menu.Label>
-                                      {nonProjectUsers.length === 0 ? (
-                                        <Menu.Item disabled>Немає інших користувачів</Menu.Item>
-                                      ) : (
-                                        nonProjectUsers.map((u) => (
-                                          <Menu.Item
-                                            key={u.id}
-                                            onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
-                                          >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                              {(() => {
-                                                const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                                return (
-                                                  <Avatar
-                                                    size="xs"
-                                                    radius="xl"
-                                                    src={isBase64 ? u.avatar : undefined}
-                                                  >
-                                                    {!isBase64 && u.avatar}
-                                                  </Avatar>
-                                                );
-                                              })()}
-                                              <div>
-                                                <Text size="xs" fw={600}>{u.name}</Text>
-                                                <Text size="10px" c="dimmed">{u.role}</Text>
-                                              </div>
+                                    </Tooltip>
+                                  </Menu.Target>
+                                  <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                    <Menu.Label>Замінити виконавця</Menu.Label>
+                                    {nonProjectUsers.length === 0 ? (
+                                      <Menu.Item disabled>Немає інших користувачів</Menu.Item>
+                                    ) : (
+                                      nonProjectUsers.map((u) => (
+                                        <Menu.Item
+                                          key={u.id}
+                                          onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {(() => {
+                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
+                                              return (
+                                                <Avatar
+                                                  size="xs"
+                                                  radius="xl"
+                                                  src={isBase64 ? u.avatar : undefined}
+                                                >
+                                                  {!isBase64 && u.avatar}
+                                                </Avatar>
+                                              );
+                                            })()}
+                                            <div>
+                                              <Text size="xs" fw={600}>{u.name}</Text>
+                                              <Text size="10px" c="dimmed">{u.role}</Text>
                                             </div>
-                                          </Menu.Item>
-                                        ))
-                                      )}
-                                      <Menu.Divider />
-                                      <Menu.Item
-                                        color="red"
-                                        leftSection={<IconTrash size={14} />}
-                                        onClick={() => onRemoveProjectMember(project.id, member.id)}
-                                      >
-                                        Видалити з проєкту
-                                      </Menu.Item>
-                                    </Menu.Dropdown>
-                                  </Menu>
-                                </Tooltip>
+                                          </div>
+                                        </Menu.Item>
+                                      ))
+                                    )}
+                                    <Menu.Divider />
+                                    <Menu.Item
+                                      color="red"
+                                      leftSection={<IconTrash size={14} />}
+                                      onClick={() => onRemoveProjectMember(project.id, member.id)}
+                                    >
+                                      Видалити з проєкту
+                                    </Menu.Item>
+                                  </Menu.Dropdown>
+                                </Menu>
                               );
                             })}
 
@@ -706,7 +717,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         <div
           className="selection-box"
           style={{
-            position: 'fixed',
+            position: 'absolute',
             left: Math.min(selectionBox.startX, selectionBox.currentX),
             top: Math.min(selectionBox.startY, selectionBox.currentY),
             width: Math.abs(selectionBox.startX - selectionBox.currentX),
