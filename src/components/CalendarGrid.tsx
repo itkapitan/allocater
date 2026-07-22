@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group } from '@mantine/core';
-import { IconUserPlus, IconTrash, IconDotsVertical, IconExchange } from '@tabler/icons-react';
+import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
@@ -229,14 +229,25 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const [moved] = list.splice(fromIdx, 1);
     list.splice(toIdx, 0, moved);
 
-    // 1. Persist the final order to the backend DB instantly
+    // 1. Update React state immediately
+    onUpdateProjectsList(list);
+
+    // 2. Persist the final order to the backend DB
     const orderedIds = list.map((p) => p.id);
     onSaveProjectsOrder(orderedIds);
 
-    // 2. Defer React state update to allow @hello-pangea/dnd to safely finish its drop transition
-    requestAnimationFrame(() => {
-      onUpdateProjectsList(list);
-    });
+    // 3. Force browser repaint after drop animation finishes (approx 200-250ms)
+    // This resolves browser rendering bug in Chrome/Safari where elements stay stuck in promoted rendering layers
+    setTimeout(() => {
+      const grid = document.querySelector('.calendar-grid-container') as HTMLElement;
+      if (grid) {
+        grid.offsetHeight; // triggers reflow
+        grid.style.transform = 'translateZ(0)'; // forces composite layer redraw
+        requestAnimationFrame(() => {
+          grid.style.transform = '';
+        });
+      }
+    }, 250);
   };
 
 
@@ -466,12 +477,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                         color={member.isDesigner ? 'indigo' : 'gray'}
                                         src={isBase64Image ? member.avatar : undefined}
                                         title={member.name}
-                                      >
-                                        {!isBase64Image && member.avatar}
-                                      </Avatar>
-                                    </div>
-                                  </Menu.Target>
-                                  <Menu.Dropdown>
+                                       >
+                                         {!isBase64Image && member.avatar}
+                                       </Avatar>
+                                     </div>
+                                   </Menu.Target>
+                                  <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
                                     <Menu.Label>Замінити виконавця</Menu.Label>
                                     {nonProjectUsers.length === 0 ? (
                                       <Menu.Item disabled>Немає інших користувачів</Menu.Item>
@@ -479,10 +490,26 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                       nonProjectUsers.map((u) => (
                                         <Menu.Item
                                           key={u.id}
-                                          leftSection={<IconExchange size={14} />}
                                           onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
                                         >
-                                          {u.name}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {(() => {
+                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
+                                              return (
+                                                <Avatar
+                                                  size="xs"
+                                                  radius="xl"
+                                                  src={isBase64 ? u.avatar : undefined}
+                                                >
+                                                  {!isBase64 && u.avatar}
+                                                </Avatar>
+                                              );
+                                            })()}
+                                            <div>
+                                              <Text size="xs" fw={600}>{u.name}</Text>
+                                              <Text size="10px" c="dimmed">{u.role}</Text>
+                                            </div>
+                                          </div>
                                         </Menu.Item>
                                       ))
                                     )}
@@ -502,11 +529,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             {isAdmin && (
                               <Menu shadow="md" width={220}>
                                 <Menu.Target>
-                                  <ActionIcon variant="light" color="indigo" radius="xl" size="sm">
+                                  <ActionIcon 
+                                    variant="light" 
+                                    color="indigo" 
+                                    radius="xl"
+                                    style={{
+                                      width: '26px',
+                                      height: '26px',
+                                      minWidth: '26px',
+                                      minHeight: '26px',
+                                      borderRadius: '50%',
+                                    }}
+                                  >
                                     <IconUserPlus size={14} />
                                   </ActionIcon>
                                 </Menu.Target>
-                                <Menu.Dropdown style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
                                   <Menu.Label>Додати виконавця</Menu.Label>
                                   {users.filter(u => !project.memberIds.includes(u.id)).length === 0 ? (
                                     <Menu.Item disabled>Усі вже додані</Menu.Item>
