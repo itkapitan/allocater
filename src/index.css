@@ -155,7 +155,8 @@ body {
   border: 1px solid rgba(99, 102, 241, 0.3) !important;
   border-radius: 8px;
   z-index: 9999;
-  transform: scale(1.005) !important;
+  scale: 1.005;
+  transition: none !important;
 }
 
 .project-row.is-dragging .project-info-cell {
