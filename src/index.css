@@ -128,7 +128,6 @@ body {
   display: flex;
   flex-direction: row;
   width: 100%;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .project-info-cell {
@@ -155,8 +154,6 @@ body {
   border: 1.5px solid var(--primary-color) !important;
   border-radius: 8px;
   z-index: 9999;
-  scale: 1.01;
-  transition: none !important;
   overflow: hidden;
 }
 
