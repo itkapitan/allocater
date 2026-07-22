@@ -71,6 +71,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
 
@@ -371,7 +373,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               }}
               onDragEnter={() => {
                 if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
-                  const list = [...projects];
+                  const list = [...projectsRef.current];
                   const [moved] = list.splice(draggedIdx, 1);
                   list.splice(idx, 0, moved);
                   onUpdateProjectsList(list);
@@ -403,7 +405,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   }}
                   onDragEnd={() => {
                     setDraggedIdx(null);
-                    const orderedIds = projects.map((p) => p.id);
+                    const orderedIds = projectsRef.current.map((p) => p.id);
                     onSaveProjectsOrder(orderedIds);
                   }}
                   className="project-drag-number"
@@ -584,7 +586,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               }}
               onDragEnter={() => {
                 if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
-                  const list = [...projects];
+                  const list = [...projectsRef.current];
                   const [moved] = list.splice(draggedIdx, 1);
                   list.splice(idx, 0, moved);
                   onUpdateProjectsList(list);
