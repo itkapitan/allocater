@@ -601,6 +601,18 @@ body {
   text-align: center;
 }
 
+.designer-workload-container {
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+  margin-top: 4px;
+}
+
+.designer-workload-container:hover {
+  background-color: #f8fafc;
+}
+
 /* Bottom add project trigger bar */
 .add-project-bar {
   display: flex;

@@ -470,109 +470,109 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
 
           return (
             <div key={designer.id}>
-              <HoverCard width={320} shadow="md" withArrow openDelay={200}>
-                <HoverCard.Target>
-                  <div className={cardClass}>
-                    <div className="designer-header">
-                      {(() => {
-                        const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
-                        return (
-                          <div
-                            className="designer-avatar"
-                            style={{
-                              backgroundColor: isBase64Image ? 'transparent' : getAvatarColor(designer.name),
-                              backgroundImage: isBase64Image ? `url(${designer.avatar})` : undefined,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                            }}
-                          >
-                            {!isBase64Image && designer.avatar}
-                          </div>
-                        );
-                      })()}
-                      <div className="designer-details">
-                        <Text className="designer-name">{designer.name}</Text>
-                        <Text className="designer-role">{designer.role}</Text>
+              <div className={cardClass}>
+                <div className="designer-header">
+                  {(() => {
+                    const isBase64Image = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
+                    return (
+                      <div
+                        className="designer-avatar"
+                        style={{
+                          backgroundColor: isBase64Image ? 'transparent' : getAvatarColor(designer.name),
+                          backgroundImage: isBase64Image ? `url(${designer.avatar})` : undefined,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }}
+                      >
+                        {!isBase64Image && designer.avatar}
                       </div>
-                    </div>
+                    );
+                  })()}
+                  <div className="designer-details">
+                    <Text className="designer-name">{designer.name}</Text>
+                    <Text className="designer-role">{designer.role}</Text>
+                  </div>
+                </div>
 
-                    <div className="designer-controls-row" onClick={(e) => e.stopPropagation()}>
-                      <div className="designer-capacity-control">
-                        <label htmlFor={`cap-${designer.id}`}>На дизайн:</label>
-                        <input
-                          id={`cap-${designer.id}`}
-                          type="number"
-                          className="designer-capacity-input"
-                          min="0"
-                          max="24"
-                          value={dailyCap}
-                          disabled={!isAdmin}
-                          onChange={(e) => onCapacityChange(designer.id, parseFloat(e.target.value) || 0)}
-                          style={{ cursor: isAdmin ? 'text' : 'not-allowed' }}
-                        />
+                <div className="designer-controls-row" onClick={(e) => e.stopPropagation()}>
+                  <div className="designer-capacity-control">
+                    <label htmlFor={`cap-${designer.id}`}>На дизайн:</label>
+                    <input
+                      id={`cap-${designer.id}`}
+                      type="number"
+                      className="designer-capacity-input"
+                      min="0"
+                      max="24"
+                      value={dailyCap}
+                      disabled={!isAdmin}
+                      onChange={(e) => onCapacityChange(designer.id, parseFloat(e.target.value) || 0)}
+                      style={{ cursor: isAdmin ? 'text' : 'not-allowed' }}
+                    />
+                  </div>
+
+                  <HoverCard width={280} shadow="md" withArrow openDelay={100}>
+                    <HoverCard.Target>
+                      <div className="designer-projects-count-badge">
+                        <span className="projects-count-label">Проєкти:</span>
+                        <span className="projects-count-number">
+                          {activeProjects.length}
+                        </span>
                       </div>
+                    </HoverCard.Target>
+                    <HoverCard.Dropdown style={{ padding: '12px', zIndex: 120 }}>
+                      <Stack gap="xs">
+                        <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.5px' }}>
+                          АКТИВНІ ПРОЄКТИ НА ЦЕЙ ТИЖДЕНЬ
+                        </Text>
+                        {activeProjects.length === 0 ? (
+                          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+                            Немає активних проєктів
+                          </Text>
+                        ) : (
+                          <Table verticalSpacing="xs" horizontalSpacing="xs">
+                            <Table.Thead>
+                              <Table.Tr>
+                                <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Проєкт</Table.Th>
+                                <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right' }}>Години</Table.Th>
+                              </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                              {activeProjects.map(({ project, hours }) => (
+                                <Table.Tr key={project.id}>
+                                  <Table.Td style={{ padding: '6px 8px' }}>
+                                    <Group gap="xs" wrap="nowrap">
+                                      <span
+                                        style={{
+                                          display: 'inline-block',
+                                          width: '8px',
+                                          height: '8px',
+                                          borderRadius: '50%',
+                                          backgroundColor: `var(--theme-${project.color}, ${project.color})`
+                                        }}
+                                      />
+                                      <Text size="xs" fw={600} style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
+                                        {project.name}
+                                      </Text>
+                                    </Group>
+                                  </Table.Td>
+                                  <Table.Td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                    <Text size="xs" fw={700} c="indigo">
+                                      {hours} год
+                                    </Text>
+                                  </Table.Td>
+                                </Table.Tr>
+                              ))}
+                            </Table.Tbody>
+                          </Table>
+                        )}
+                      </Stack>
+                    </HoverCard.Dropdown>
+                  </HoverCard>
+                </div>
 
-                      <HoverCard width={280} shadow="md" withArrow openDelay={100}>
-                        <HoverCard.Target>
-                          <div className="designer-projects-count-badge">
-                            <span className="projects-count-label">Проєкти:</span>
-                            <span className="projects-count-number">
-                              {activeProjects.length}
-                            </span>
-                          </div>
-                        </HoverCard.Target>
-                        <HoverCard.Dropdown style={{ padding: '12px', zIndex: 120 }}>
-                          <Stack gap="xs">
-                            <Text size="xs" fw={700} c="dimmed" style={{ letterSpacing: '0.5px' }}>
-                              АКТИВНІ ПРОЄКТИ НА ЦЕЙ ТИЖДЕНЬ
-                            </Text>
-                            {activeProjects.length === 0 ? (
-                              <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
-                                Немає активних проєктів
-                              </Text>
-                            ) : (
-                              <Table verticalSpacing="xs" horizontalSpacing="xs">
-                                <Table.Thead>
-                                  <Table.Tr>
-                                    <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Проєкт</Table.Th>
-                                    <Table.Th style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right' }}>Години</Table.Th>
-                                  </Table.Tr>
-                                </Table.Thead>
-                                <Table.Tbody>
-                                  {activeProjects.map(({ project, hours }) => (
-                                    <Table.Tr key={project.id}>
-                                      <Table.Td style={{ padding: '6px 8px' }}>
-                                        <Group gap="xs" wrap="nowrap">
-                                          <span
-                                            style={{
-                                              display: 'inline-block',
-                                              width: '8px',
-                                              height: '8px',
-                                              borderRadius: '50%',
-                                              backgroundColor: `var(--theme-${project.color}, ${project.color})`
-                                            }}
-                                          />
-                                          <Text size="xs" fw={600} style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
-                                            {project.name}
-                                          </Text>
-                                        </Group>
-                                      </Table.Td>
-                                      <Table.Td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                                        <Text size="xs" fw={700} c="indigo">
-                                          {hours} год
-                                        </Text>
-                                      </Table.Td>
-                                    </Table.Tr>
-                                  ))}
-                                </Table.Tbody>
-                              </Table>
-                            )}
-                          </Stack>
-                        </HoverCard.Dropdown>
-                      </HoverCard>
-                    </div>
-
-                    <div>
+                <HoverCard width={320} shadow="md" withArrow openDelay={200}>
+                  <HoverCard.Target>
+                    <div className="designer-workload-container" style={{ cursor: 'pointer' }}>
                       <Group justify="space-between" mb="xs">
                         <Text size="xs" c="dimmed" fw={600}>Тижневе завантаження:</Text>
                         <Text size="xs" fw={700} color={statusColor}>
@@ -588,45 +588,44 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
                         animated={percentLoad > 100}
                       />
                     </div>
-                  </div>
-                </HoverCard.Target>
-
-                <HoverCard.Dropdown>
-                  <Stack gap="xs">
-                    <Text size="xs" fw={700} c="dimmed">
-                      ДЕТАЛЬНИЙ РОЗПОДІЛ (ПН-ПТ)
-                    </Text>
-                    <Table verticalSpacing="xs">
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>День</Table.Th>
-                          <Table.Th>Години</Table.Th>
-                          <Table.Th>Статус</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {dailyAllocations.map((item) => (
-                          <Table.Tr key={item.dateStr}>
-                            <Table.Td>{getDayNameUa(item.date.getDay())} ({item.date.getDate()})</Table.Td>
-                            <Table.Td>{item.hours} / {item.capacity} год</Table.Td>
-                            <Table.Td>
-                              {item.isWeekend ? (
-                                <Text size="10px" c="dimmed">Вихідний</Text>
-                              ) : item.hours > item.capacity ? (
-                                <Text size="10px" c="red" fw={700}>Перевантаження</Text>
-                              ) : item.hours === item.capacity ? (
-                                <Text size="10px" c="teal" fw={700}>Заповнено</Text>
-                              ) : (
-                                <Text size="10px" c="indigo">Вільний</Text>
-                              )}
-                            </Table.Td>
+                  </HoverCard.Target>
+                  <HoverCard.Dropdown style={{ zIndex: 120 }}>
+                    <Stack gap="xs">
+                      <Text size="xs" fw={700} c="dimmed">
+                        ДЕТАЛЬНИЙ РОЗПОДІЛ (ПН-ПТ)
+                      </Text>
+                      <Table verticalSpacing="xs">
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ fontSize: '10px' }}>День</Table.Th>
+                            <Table.Th style={{ fontSize: '10px' }}>Години</Table.Th>
+                            <Table.Th style={{ fontSize: '10px' }}>Статус</Table.Th>
                           </Table.Tr>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
-                  </Stack>
-                </HoverCard.Dropdown>
-              </HoverCard>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {dailyAllocations.map((item) => (
+                            <Table.Tr key={item.dateStr}>
+                              <Table.Td style={{ fontSize: '11px' }}>{getDayNameUa(item.date.getDay())} ({item.date.getDate()})</Table.Td>
+                              <Table.Td style={{ fontSize: '11px' }}>{item.hours} / {item.capacity} год</Table.Td>
+                              <Table.Td style={{ fontSize: '11px' }}>
+                                {item.isWeekend ? (
+                                  <Text size="10px" c="dimmed">Вихідний</Text>
+                                ) : item.hours > item.capacity ? (
+                                  <Text size="10px" c="red" fw={700}>Перевантаження</Text>
+                                ) : item.hours === item.capacity ? (
+                                  <Text size="10px" c="teal" fw={700}>Заповнено</Text>
+                                ) : (
+                                  <Text size="10px" c="indigo">Вільний</Text>
+                                )}
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </Stack>
+                  </HoverCard.Dropdown>
+                </HoverCard>
+              </div>
             </div>
           );
         })}
