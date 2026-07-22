@@ -43,6 +43,8 @@ interface CalendarGridProps {
   onAddAllocation: (allocation: Omit<Allocation, 'id'>) => void;
   onUpdateAllocation: (id: string, updated: Partial<Allocation>) => void;
   onDeleteAllocation: (id: string) => void;
+  onUpdateProjectsList: (newList: Project[]) => void;
+  onSaveProjectsOrder: (orderedIds: string[]) => void;
   isAdmin: boolean;
 }
 
@@ -60,12 +62,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onAddAllocation,
   onUpdateAllocation,
   onDeleteAllocation,
+  onUpdateProjectsList,
+  onSaveProjectsOrder,
   isAdmin,
 }) => {
   // Drag selection state
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
   const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
 
   const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
 
@@ -325,7 +330,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       )}
 
       {/* Grid Headers Row */}
-      <div className="project-column-header">Проєкт / Команда</div>
+      <div className="project-column-header">Проєкти ({projects.length}) / Виконавці</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderLeft: '1px solid var(--border-color)' }}>
         {days.map((day) => {
           return (
@@ -337,7 +342,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         })}
       </div>
       {/* Grid Rows for each project */}
-      {projects.map((project) => {
+      {projects.map((project, idx) => {
         const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
         const projectDesigners = projectMembers.filter((u) => u.isDesigner);
         const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
@@ -355,8 +360,58 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         return (
           <div className="project-row" key={project.id}>
             {/* Left Cell: Project Name & Members */}
-            <div className="project-info-cell">
-              <div className="project-title-container">
+            <div 
+              className="project-info-cell"
+              style={{
+                opacity: draggedIdx === idx ? 0.4 : 1,
+                transition: 'opacity 0.2s ease',
+              }}
+              onDragOver={(e) => {
+                if (isAdmin) e.preventDefault();
+              }}
+              onDragEnter={() => {
+                if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
+                  const list = [...projects];
+                  const [moved] = list.splice(draggedIdx, 1);
+                  list.splice(idx, 0, moved);
+                  onUpdateProjectsList(list);
+                  setDraggedIdx(idx);
+                }
+              }}
+            >
+              <div className="project-title-container" style={{ display: 'flex', alignItems: 'center' }}>
+                <span
+                  style={{
+                    cursor: isAdmin ? 'ns-resize' : 'default',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    color: 'var(--text-muted)',
+                    marginRight: '8px',
+                    userSelect: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.15)',
+                    transition: 'all 0.2s',
+                  }}
+                  draggable={isAdmin}
+                  onDragStart={(e) => {
+                    setDraggedIdx(idx);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragEnd={() => {
+                    setDraggedIdx(null);
+                    const orderedIds = projects.map((p) => p.id);
+                    onSaveProjectsOrder(orderedIds);
+                  }}
+                  className="project-drag-number"
+                  title={isAdmin ? 'Перетягніть для зміни приоритету' : undefined}
+                >
+                  {idx + 1}
+                </span>
+
                 <input
                   type="text"
                   className="project-name-input"
@@ -367,6 +422,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   style={{
                     cursor: isAdmin ? 'text' : 'default',
                     background: 'transparent',
+                    flexGrow: 1,
                   }}
                 />
                 
@@ -518,7 +574,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             {/* Right Cell: Days Grid & Allocations overlay */}
             <div 
               className="calendar-days-cell"
-              style={{ minHeight: `${Math.max(140, lanes.length * 56 + 24)}px` }}
+              style={{ 
+                minHeight: `${Math.max(140, lanes.length * 56 + 24)}px`,
+                opacity: draggedIdx === idx ? 0.4 : 1,
+                transition: 'opacity 0.2s ease',
+              }}
+              onDragOver={(e) => {
+                if (isAdmin) e.preventDefault();
+              }}
+              onDragEnter={() => {
+                if (isAdmin && draggedIdx !== null && draggedIdx !== idx) {
+                  const list = [...projects];
+                  const [moved] = list.splice(draggedIdx, 1);
+                  list.splice(idx, 0, moved);
+                  onUpdateProjectsList(list);
+                  setDraggedIdx(idx);
+                }
+              }}
             >
               {days.map((day, idx) => {
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;

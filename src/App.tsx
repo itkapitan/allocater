@@ -291,6 +291,18 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleUpdateProjectsList = (newList: Project[]) => {
+    setProjects(newList);
+  };
+
+  const handleSaveProjectsOrder = (orderedIds: string[]) => {
+    fetch('/api/projects/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: orderedIds }),
+    }).catch((err) => console.error('Error saving projects order:', err));
+  };
+
   // --- Allocations Event Handlers (SQLite Synced) ---
   const handleAddAllocation = (allocData: Omit<Allocation, 'id'>) => {
     if (!isAdmin) return;
@@ -432,6 +444,8 @@ export const App: React.FC = () => {
             onAddAllocation={handleAddAllocation}
             onUpdateAllocation={handleUpdateAllocation}
             onDeleteAllocation={handleDeleteAllocation}
+            onUpdateProjectsList={handleUpdateProjectsList}
+            onSaveProjectsOrder={handleSaveProjectsOrder}
             isAdmin={isAdmin}
           />
 

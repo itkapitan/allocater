@@ -117,8 +117,15 @@ async function initializeDb() {
       id TEXT PRIMARY KEY,
       name TEXT,
       color TEXT,
-      memberIds TEXT
+      memberIds TEXT,
+      sortOrder INTEGER DEFAULT 0
     )`);
+
+    try {
+      await executeQuery(`ALTER TABLE projects ADD COLUMN sortOrder INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
 
     await executeQuery(`CREATE TABLE IF NOT EXISTS allocations (
       id TEXT PRIMARY KEY,
@@ -267,7 +274,7 @@ async function saveAvatarFile(id, avatar) {
 app.get('/api/data', async (req, res) => {
   try {
     const rawUsers = await executeQuery('SELECT * FROM users');
-    const rawProjects = await executeQuery('SELECT * FROM projects');
+    const rawProjects = await executeQuery('SELECT * FROM projects ORDER BY sortOrder ASC, id ASC');
     const rawAllocations = await executeQuery('SELECT * FROM allocations');
     const rawCapacities = await executeQuery('SELECT * FROM capacities');
 
@@ -589,10 +596,10 @@ app.post('/api/migrate-from-sqlite', async (req, res) => {
     if (projects && projects.length > 0) {
       for (const p of projects) {
         await executeQuery(
-          `INSERT INTO projects (id, name, color, memberIds) 
-           VALUES (?, ?, ?, ?) 
-           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, memberIds = EXCLUDED.memberIds`,
-          [p.id, p.name, p.color, typeof p.memberIds === 'string' ? p.memberIds : JSON.stringify(p.memberIds)]
+          `INSERT INTO projects (id, name, color, memberIds, sortOrder) 
+           VALUES (?, ?, ?, ?, ?) 
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, memberIds = EXCLUDED.memberIds, sortOrder = EXCLUDED.sortOrder`,
+          [p.id, p.name, p.color, typeof p.memberIds === 'string' ? p.memberIds : JSON.stringify(p.memberIds), p.sortOrder || 0]
         );
       }
     }
@@ -626,6 +633,23 @@ app.post('/api/migrate-from-sqlite', async (req, res) => {
     res.json({ success: true, message: 'Дані успішно імпортовані в Postgres' });
   } catch (err) {
     console.error('Migration failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update projects sort order
+app.put('/api/projects/order', async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: 'Некоректні IDs' });
+  }
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      await executeQuery('UPDATE projects SET sortOrder = ? WHERE id = ?', [i, ids[i]]);
+    }
+    res.json({ success: true, message: 'Порядок проектів успішно збережено' });
+  } catch (err) {
+    console.error('Error updating projects order:', err);
     res.status(500).json({ error: err.message });
   }
 });
