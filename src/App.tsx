@@ -337,9 +337,19 @@ export const App: React.FC = () => {
 
   // --- Calendar Navigation ---
   // Default current week starts on Monday, July 20, 2026
+  const getMonday = (d: Date): Date => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
   const [weekStart, setWeekStart] = useState<Date>(() => {
-    const defaultDate = new Date('2026-07-20T00:00:00');
-    return defaultDate;
+    const saved = sessionStorage.getItem('last_week_start');
+    if (saved) return new Date(saved);
+    return getMonday(new Date());
   });
 
   const getWeekDays = (start: Date) => {
@@ -353,6 +363,13 @@ export const App: React.FC = () => {
   };
 
   const weekDays = getWeekDays(weekStart);
+
+  // Сохранение текущей недели в sessionStorage
+  useEffect(() => {
+    if (weekStart) {
+      sessionStorage.setItem('last_week_start', weekStart.toISOString());
+    }
+  }, [weekStart]);
 
   // Fetch initial data from SQLite Express Backend
   useEffect(() => {
@@ -459,6 +476,10 @@ export const App: React.FC = () => {
     const next = new Date(weekStart);
     next.setDate(weekStart.getDate() + 7);
     setWeekStart(next);
+  };
+
+  const handleCurrentWeek = () => {
+    setWeekStart(getMonday(new Date()));
   };
 
   // Format week month and year in Ukrainian (showing working days Monday-Friday dates)
@@ -1169,6 +1190,7 @@ export const App: React.FC = () => {
                 currentMonthYear={getMonthYearLabel(weekDays)}
                 onPrevWeek={handlePrevWeek}
                 onNextWeek={handleNextWeek}
+                onCurrentWeek={handleCurrentWeek}
                 onOpenManageUsers={() => setDrawerOpened(true)}
                 onOpenManageSpaces={() => setManageSpacesOpened(true)}
                 isAdmin={isAdmin}
@@ -1195,6 +1217,7 @@ export const App: React.FC = () => {
                   currentMonthYear={getMonthYearLabel(weekDays)}
                   onPrevWeek={handlePrevWeek}
                   onNextWeek={handleNextWeek}
+                  onCurrentWeek={handleCurrentWeek}
                   onOpenManageUsers={() => setDrawerOpened(true)}
                   onOpenManageSpaces={() => setManageSpacesOpened(true)}
                   isAdmin={isAdmin}

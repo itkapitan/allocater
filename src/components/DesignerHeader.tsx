@@ -1,6 +1,6 @@
 import React from 'react';
-import { Group, Text, ActionIcon, Progress, HoverCard, Table, Stack, Skeleton } from '@mantine/core';
-import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { Group, Text, ActionIcon, Progress, HoverCard, Table, Stack, Skeleton, Tooltip } from '@mantine/core';
+import { IconChevronLeft, IconChevronRight, IconCalendar } from '@tabler/icons-react';
 import type { User, Allocation, Project } from '../types';
 
 interface DesignerHeaderProps {
@@ -13,6 +13,7 @@ interface DesignerHeaderProps {
   currentMonthYear: string;
   onPrevWeek: () => void;
   onNextWeek: () => void;
+  onCurrentWeek: () => void;
   onOpenManageUsers?: () => void;
   onOpenManageSpaces?: () => void;
   isAdmin: boolean;
@@ -32,6 +33,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   currentMonthYear,
   onPrevWeek,
   onNextWeek,
+  onCurrentWeek,
   isAdmin,
   isSticky = false,
   loading = false,
@@ -69,22 +71,7 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   if (isSticky) {
     return (
       <div className="compact-header-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        {/* Left Side: Month name + week arrows */}
-        <Group gap="md">
-          <Text fw={800} style={{ fontSize: '20px', fontFamily: 'var(--font-family)', color: 'var(--text-main)', margin: 0, padding: 0 }}>
-            {currentMonthYear}
-          </Text>
-          <Group gap={4}>
-            <ActionIcon variant="light" color="indigo" size="md" onClick={onPrevWeek} radius="md" title="Попередній тиждень">
-              <IconChevronLeft size={14} />
-            </ActionIcon>
-            <ActionIcon variant="light" color="indigo" size="md" onClick={onNextWeek} radius="md" title="Наступний тиждень">
-              <IconChevronRight size={14} />
-            </ActionIcon>
-          </Group>
-        </Group>
-
-        {/* Right Side: Designers list (compact) */}
+        {/* Left Side: Designers list (compact) */}
         <Group gap="lg">
           {loading ? (
             Array.from({ length: 3 }).map((_, idx) => (
@@ -248,6 +235,26 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
           })
         )}
       </Group>
+
+      {/* Right Side: Month name + new calendar button + week arrows */}
+      <Group gap="md">
+        <Text fw={800} style={{ fontSize: '16px', fontFamily: 'var(--font-family)', color: 'var(--text-main)', margin: 0, padding: 0 }}>
+          {currentMonthYear}
+        </Text>
+        <Tooltip label="Перейти на поточну дату" withArrow>
+          <ActionIcon variant="light" color="indigo" size="md" onClick={onCurrentWeek} radius="md">
+            <IconCalendar size={14} />
+          </ActionIcon>
+        </Tooltip>
+        <Group gap={4}>
+          <ActionIcon variant="light" color="indigo" size="md" onClick={onPrevWeek} radius="md" title="Попередній тиждень">
+            <IconChevronLeft size={14} />
+          </ActionIcon>
+          <ActionIcon variant="light" color="indigo" size="md" onClick={onNextWeek} radius="md" title="Наступний тиждень">
+            <IconChevronRight size={14} />
+          </ActionIcon>
+        </Group>
+      </Group>
       </div>
     );
   }
@@ -255,11 +262,16 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   return (
     <div style={{ marginBottom: '24px' }}>
       {/* Top Title & Navigation Row */}
-      <Group justify="space-between" mb="xl">
+      <Group justify="flex-end" mb="xl">
         <Group gap="md">
           <Text fw={800} size="xl" style={{ fontSize: '28px', fontFamily: 'var(--font-family)', color: 'var(--text-main)', marginRight: '8px' }}>
             {currentMonthYear}
           </Text>
+          <Tooltip label="Перейти на поточну дату" withArrow>
+            <ActionIcon variant="light" color="indigo" size="lg" onClick={onCurrentWeek} radius="md">
+              <IconCalendar size={18} />
+            </ActionIcon>
+          </Tooltip>
           {/* Chevron Navigation Buttons next to the title */}
           <Group gap={4}>
             <ActionIcon variant="light" color="indigo" size="lg" onClick={onPrevWeek} radius="md" title="Попередній тиждень">
