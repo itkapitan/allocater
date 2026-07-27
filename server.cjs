@@ -199,11 +199,15 @@ async function initializeDb() {
       title TEXT
     )`);
 
-    await executeQuery(`CREATE TABLE IF NOT EXISTS task_images (
-      filename TEXT PRIMARY KEY,
-      mimetype TEXT,
-      data TEXT
-    )`);
+    try {
+      await executeQuery(`CREATE TABLE IF NOT EXISTS task_images (
+        filename TEXT PRIMARY KEY,
+        mimetype TEXT,
+        data TEXT
+      )`);
+    } catch (e) {
+      console.error('Error creating task_images table in initializeDb:', e);
+    }
 
     // Check and seed users if empty
     const userRows = await executeQuery('SELECT COUNT(*) as count FROM users');
@@ -512,10 +516,29 @@ app.post('/api/upload', async (req, res) => {
         return res.json({ url: `/uploads/${filename}` });
       } catch (fsErr) {
         console.warn('Local filesystem write failed, falling back to database storage:', fsErr.message);
-        await executeQuery(
-          'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
-          [filename, mimetype, base64Data]
-        );
+        try {
+          await executeQuery(
+            'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
+            [filename, mimetype, base64Data]
+          );
+        } catch (dbErr) {
+          const errMsg = dbErr.message || '';
+          if (errMsg.includes('relation "task_images" does not exist') || errMsg.includes('no such table: task_images')) {
+            console.log('task_images table does not exist, creating it dynamically...');
+            await executeQuery(`CREATE TABLE IF NOT EXISTS task_images (
+              filename TEXT PRIMARY KEY,
+              mimetype TEXT,
+              data TEXT
+            )`);
+            // Retry the insert
+            await executeQuery(
+              'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
+              [filename, mimetype, base64Data]
+            );
+          } else {
+            throw dbErr;
+          }
+        }
         return res.json({ url: `/api/uploads/${filename}` });
       }
     }
