@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@editorjs/editorjs": "^2.31.6",
+    "@editorjs/image": "^2.10.3",
+    "@editorjs/list": "^2.0.9",
     "@hello-pangea/dnd": "^18.0.1",
     "@mantine/core": "^9.4.1",
     "@mantine/hooks": "^9.4.1",

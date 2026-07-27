@@ -816,6 +816,65 @@ app.post('/api/tasks', async (req, res) => {
   }
 });
 
+// Helper to extract image URLs from Editor.js JSON description
+function getImageUrlsFromDescription(description) {
+  const urls = [];
+  if (!description) return urls;
+  const trimmed = description.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const data = JSON.parse(trimmed);
+      if (data && data.blocks) {
+        data.blocks.forEach((block) => {
+          if (block.type === 'image' && block.data && block.data.file && block.data.file.url) {
+            urls.push(block.data.file.url);
+          }
+        });
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }
+  return urls;
+}
+
+// Helper to delete an image file from local uploads or Vercel Blob
+function deleteUploadFile(fileUrl) {
+  if (!fileUrl) return;
+  if (fileUrl.startsWith('/uploads/')) {
+    const filename = fileUrl.replace('/uploads/', '');
+    const filepath = path.join(__dirname, 'public', 'uploads', filename);
+    if (fs.existsSync(filepath)) {
+      try {
+        fs.unlinkSync(filepath);
+        console.log(`Deleted local file: ${filepath}`);
+      } catch (err) {
+        console.error(`Failed to delete local file ${filepath}:`, err);
+      }
+    }
+  } else if (fileUrl.includes('vercel-storage.com') || fileUrl.includes('public.blob.vercel-storage.com')) {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      import('@vercel/blob').then(({ del }) => {
+        del(fileUrl).then(() => {
+          console.log(`Deleted Vercel Blob file: ${fileUrl}`);
+        }).catch((err) => {
+          console.error(`Failed to delete Vercel Blob file ${fileUrl}:`, err);
+        });
+      });
+    }
+  }
+}
+
+// Compare old and new descriptions and delete images that were removed
+async function cleanupDeletedImages(oldDesc, newDesc) {
+  const oldUrls = getImageUrlsFromDescription(oldDesc);
+  const newUrls = getImageUrlsFromDescription(newDesc);
+  const deletedUrls = oldUrls.filter((url) => !newUrls.includes(url));
+  deletedUrls.forEach((url) => {
+    deleteUploadFile(url);
+  });
+}
+
 app.put('/api/tasks/:id', async (req, res) => {
   const { id } = req.params;
   const { title, description, projectId, designerId, columnId, sortOrder } = req.body;
@@ -827,6 +886,11 @@ app.put('/api/tasks/:id', async (req, res) => {
       params.push(title);
     }
     if (description !== undefined) {
+      // Get old description to cleanup deleted images
+      const oldRows = await executeQuery('SELECT description FROM tasks WHERE id = ?', [id]);
+      const oldDesc = oldRows && oldRows[0] ? oldRows[0].description : '';
+      cleanupDeletedImages(oldDesc, description);
+
       query += 'description = ?, ';
       params.push(description);
     }
@@ -858,6 +922,14 @@ app.put('/api/tasks/:id', async (req, res) => {
 app.delete('/api/tasks/:id', async (req, res) => {
   const { id } = req.params;
   try {
+    // Get old description to delete any images before deleting the task
+    const oldRows = await executeQuery('SELECT description FROM tasks WHERE id = ?', [id]);
+    const oldDesc = oldRows && oldRows[0] ? oldRows[0].description : '';
+    const urls = getImageUrlsFromDescription(oldDesc);
+    urls.forEach((url) => {
+      deleteUploadFile(url);
+    });
+
     await executeQuery('DELETE FROM tasks WHERE id = ?', [id]);
     await executeQuery('DELETE FROM task_attachments WHERE taskId = ?', [id]);
     await executeQuery('DELETE FROM task_links WHERE taskId = ?', [id]);

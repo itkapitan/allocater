@@ -1,4 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import EditorJS from '@editorjs/editorjs';
+// @ts-ignore
+import List from '@editorjs/list';
+// @ts-ignore
+import ImageTool from '@editorjs/image';
 import {
   DragDropContext,
   Droppable,
@@ -19,7 +24,6 @@ import {
   Avatar,
   Tooltip,
   Badge,
-  FileButton,
   Divider,
   ColorInput
 } from '@mantine/core';
@@ -28,7 +32,6 @@ import {
   IconTrash,
   IconPencil,
   IconNotebook,
-  IconPhoto,
   IconLink,
   IconPaperclip
 } from '@tabler/icons-react';
@@ -112,9 +115,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const [draftProjectId, setDraftProjectId] = useState('');
   const [draftDesignerId, setDraftDesignerId] = useState<string | null>('');
   
-  // Custom minimal rich text state helper
-  const descriptionEditorRef = useRef<HTMLDivElement>(null);
-
   // --- Space specific projects ---
   const activeProjects = projects.filter((p) => p.spaceId === activeSpaceId && !p.isArchived);
   const activeDesigners = users.filter((u) => u.isDesigner);
@@ -201,42 +201,258 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     setSelectedTask((prev: any) => prev ? { ...prev, ...updatedFields } : null);
   };
 
-  // Image Upload handler
-  const handleImageUpload = (file: File | null) => {
-    if (!file) return;
+  // Client-side image WebP converter and compressor (zero dependencies, works on any platform)
+  const compressAndConvertToWebp = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64Image = e.target?.result as string;
-      if (!base64Image) return;
-
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64Image })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          const imgUrl = data.url;
-          const imgHtml = `<img src="${imgUrl}" alt="${file.name}" style="max-width: 100%; border-radius: 8px; margin: 8px 0; display: block; box-shadow: var(--shadow-sm);" />`;
-          
-          const el = descriptionEditorRef.current;
-          if (el) {
-            el.focus();
-            document.execCommand('insertHTML', false, imgHtml);
-            setDraftDesc(el.innerHTML);
-            handleAutosave({ description: el.innerHTML });
+          const maxDimension = 1920;
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
           }
-        } else {
-          console.error('Failed to upload image to server');
-        }
-      } catch (err) {
-        console.error('Error uploading image:', err);
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const webpDataUrl = canvas.toDataURL('image/webp', 0.8);
+            resolve(webpDataUrl);
+          } else {
+            resolve(e.target?.result as string);
+          }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Convert HTML or plain text descriptions into Editor.js blocks
+  const parseDescriptionToEditorData = (desc: string) => {
+    if (!desc) {
+      return { blocks: [] };
+    }
+    const trimmed = desc.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (e) {
+        // Fallback
       }
+    }
+    return {
+      blocks: [
+        {
+          type: 'paragraph',
+          data: {
+            text: desc
+          }
+        }
+      ]
     };
-    reader.readAsDataURL(file);
+  };
+
+  // Render Editor.js JSON data in View Mode
+  const renderEditorJSData = (jsonStr: string) => {
+    if (!jsonStr) {
+      return (
+        <Text c="dimmed" style={{ fontStyle: 'italic' }}>
+          Немає опису. Натисніть тут, щоб додати деталі...
+        </Text>
+      );
+    }
+    
+    let data;
+    const trimmed = jsonStr.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        data = JSON.parse(trimmed);
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    if (!data || !data.blocks || data.blocks.length === 0) {
+      return (
+        <div 
+          dangerouslySetInnerHTML={{ __html: jsonStr }} 
+          style={{ wordBreak: 'break-word', color: 'var(--text-main)', fontSize: '14px', lineHeight: 1.6 }} 
+        />
+      );
+    }
+
+    return (
+      <div className="editorjs-content" style={{ color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {data.blocks.map((block: any, idx: number) => {
+          switch (block.type) {
+            case 'paragraph':
+              return (
+                <Text 
+                  key={idx} 
+                  size="sm" 
+                  style={{ lineHeight: 1.6, wordBreak: 'break-word' }}
+                  dangerouslySetInnerHTML={{ __html: block.data.text }}
+                />
+              );
+            case 'header':
+              const level = block.data.level || 2;
+              const fontSize = level === 1 ? '22px' : level === 2 ? '18px' : '16px';
+              return (
+                <Text 
+                  key={idx} 
+                  fw={700} 
+                  style={{ fontSize, marginTop: '8px', marginBottom: '4px' }}
+                  dangerouslySetInnerHTML={{ __html: block.data.text }}
+                />
+              );
+            case 'list':
+              const isNumbered = block.data.style === 'ordered';
+              const ListTag = isNumbered ? 'ol' : 'ul';
+              return (
+                <ListTag 
+                  key={idx} 
+                  style={{ 
+                    paddingLeft: '24px', 
+                    margin: '4px 0', 
+                    listStyleType: isNumbered ? 'decimal' : 'disc',
+                    lineHeight: 1.6,
+                    fontSize: '14px'
+                  }}
+                >
+                  {block.data.items.map((item: string, itemIdx: number) => (
+                    <li key={itemIdx} dangerouslySetInnerHTML={{ __html: item }} style={{ marginBottom: '4px' }} />
+                  ))}
+                </ListTag>
+              );
+            case 'image':
+              const imgUrl = block.data.file?.url || '';
+              const caption = block.data.caption || '';
+              return (
+                <div key={idx} style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <img 
+                    src={imgUrl} 
+                    alt={caption} 
+                    style={{ 
+                      maxWidth: '100%', 
+                      borderRadius: '8px', 
+                      boxShadow: 'var(--shadow-sm)',
+                      display: 'block',
+                      height: 'auto'
+                    }} 
+                  />
+                  {caption && (
+                    <Text size="xs" c="dimmed" mt="xs" style={{ fontStyle: 'italic', textAlign: 'center' }}>
+                      {caption}
+                    </Text>
+                  )}
+                </div>
+              );
+            default:
+              return null;
+          }
+        })}
+      </div>
+    );
+  };
+
+  const editorInstanceRef = useRef<EditorJS | null>(null);
+
+  useEffect(() => {
+    if (editingDesc) {
+      const timer = setTimeout(() => {
+        const container = document.getElementById('editorjs-container');
+        if (!container) return;
+
+        const editor = new EditorJS({
+          holder: 'editorjs-container',
+          data: parseDescriptionToEditorData(draftDesc),
+          tools: {
+            list: {
+              class: List,
+              inlineToolbar: true,
+              config: {
+                defaultStyle: 'unordered'
+              }
+            },
+            image: {
+              class: ImageTool,
+              config: {
+                uploader: {
+                  uploadByFile(file: File) {
+                    return compressAndConvertToWebp(file)
+                      .then((base64) => {
+                        return fetch('/api/upload', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ image: base64 })
+                        });
+                      })
+                      .then((res) => res.json())
+                      .then((data) => {
+                        return {
+                          success: 1,
+                          file: {
+                            url: data.url
+                          }
+                        };
+                      })
+                      .catch((err) => {
+                        console.error('Image upload failed:', err);
+                        return { success: 0 };
+                      });
+                  }
+                }
+              }
+            }
+          },
+          placeholder: 'Введіть опис задачі тут...',
+          minHeight: 120
+        });
+
+        editorInstanceRef.current = editor;
+      }, 50);
+
+      return () => {
+        clearTimeout(timer);
+        if (editorInstanceRef.current) {
+          try {
+            editorInstanceRef.current.destroy();
+          } catch (e) {
+            console.error('Error destroying EditorJS:', e);
+          }
+          editorInstanceRef.current = null;
+        }
+      };
+    }
+  }, [editingDesc]);
+
+  const handleSaveDescription = async () => {
+    if (editorInstanceRef.current) {
+      try {
+        const savedData = await editorInstanceRef.current.save();
+        const jsonStr = JSON.stringify(savedData);
+        setDraftDesc(jsonStr);
+        handleAutosave({ description: jsonStr });
+        setEditingDesc(false);
+      } catch (error) {
+        console.error('Saving editor data failed: ', error);
+      }
+    }
   };
 
   // Open Task details modal
@@ -894,95 +1110,18 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
               
               {editingDesc ? (
                 <Stack gap="xs">
-                  <div className="rich-editor-container" style={{ borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-                    {/* Toolbar */}
-                    <Group gap="xs" style={{ borderBottom: '1px solid var(--border-color)', padding: '6px 12px', backgroundColor: '#f8fafc' }}>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="indigo"
-                        onClick={() => {
-                          const el = descriptionEditorRef.current;
-                          if (el) {
-                            document.execCommand('bold', false);
-                            setDraftDesc(el.innerHTML);
-                          }
-                        }}
-                        style={{ height: '24px', padding: '0 6px' }}
-                      >
-                        <strong>B</strong>
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="indigo"
-                        onClick={() => {
-                          const el = descriptionEditorRef.current;
-                          if (el) {
-                            document.execCommand('italic', false);
-                            setDraftDesc(el.innerHTML);
-                          }
-                        }}
-                        style={{ height: '24px', padding: '0 6px' }}
-                      >
-                        <em>I</em>
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="indigo"
-                        onClick={() => {
-                          const el = descriptionEditorRef.current;
-                          if (el) {
-                            document.execCommand('insertUnorderedList', false);
-                            setDraftDesc(el.innerHTML);
-                          }
-                        }}
-                        style={{ height: '24px', padding: '0 6px' }}
-                      >
-                        • Список
-                      </Button>
-
-                      <Divider orientation="vertical" h={16} />
-
-                      {/* Image Upload Button */}
-                      <FileButton
-                        onChange={handleImageUpload}
-                        accept="image/*"
-                      >
-                        {(props) => (
-                          <Button
-                            {...props}
-                            size="xs"
-                            variant="subtle"
-                            color="indigo"
-                            leftSection={<IconPhoto size={14} />}
-                            style={{ height: '24px', padding: '0 6px' }}
-                          >
-                            Зображення
-                          </Button>
-                        )}
-                      </FileButton>
-                    </Group>
-
-                    {/* Editor Body */}
-                    <div
-                      ref={descriptionEditorRef}
-                      contentEditable
-                      onBlur={(e) => setDraftDesc(e.currentTarget.innerHTML)}
-                      dangerouslySetInnerHTML={{ __html: draftDesc }}
-                      style={{
-                        minHeight: '150px',
-                        padding: '12px',
-                        outline: 'none',
-                        backgroundColor: '#ffffff',
-                        fontSize: '14px',
-                        lineHeight: 1.5,
-                        maxHeight: '400px',
-                        overflowY: 'auto'
-                      }}
-                    />
-                  </div>
+                  <div 
+                    id="editorjs-container" 
+                    style={{ 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border-color)', 
+                      padding: '12px 16px',
+                      backgroundColor: '#ffffff',
+                      minHeight: '160px',
+                      maxHeight: '400px',
+                      overflowY: 'auto'
+                    }} 
+                  />
 
                   <Group justify="flex-end" gap="xs">
                     <Button
@@ -990,7 +1129,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       variant="subtle"
                       color="gray"
                       onClick={() => {
-                        setDraftDesc(selectedTask.description || '');
                         setEditingDesc(false);
                       }}
                     >
@@ -999,13 +1137,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                     <Button
                       size="xs"
                       color="indigo"
-                      onClick={() => {
-                        const el = descriptionEditorRef.current;
-                        const content = el ? el.innerHTML : draftDesc;
-                        setDraftDesc(content);
-                        handleAutosave({ description: content });
-                        setEditingDesc(false);
-                      }}
+                      onClick={handleSaveDescription}
                     >
                       Зберегти опис
                     </Button>
@@ -1021,26 +1153,12 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                     borderRadius: '8px',
                     border: '1px solid var(--border-color)',
                     backgroundColor: '#fafbfc',
-                    transition: 'background-color 0.2s',
-                    fontSize: '14px',
-                    lineHeight: 1.6
+                    transition: 'background-color 0.2s'
                   }}
                   className="hover-editable-desc"
                   title="Натисніть для редагування опису"
                 >
-                  {draftDesc ? (
-                    <div 
-                      className="rich-description-view" 
-                      dangerouslySetInnerHTML={{ __html: draftDesc }} 
-                      style={{
-                        wordBreak: 'break-word'
-                      }}
-                    />
-                  ) : (
-                    <Text c="dimmed" style={{ fontStyle: 'italic' }}>
-                      Немає опису. Натисніть тут, щоб додати деталі...
-                    </Text>
-                  )}
+                  {renderEditorJSData(draftDesc)}
                 </div>
               )}
 
