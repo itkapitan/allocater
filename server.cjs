@@ -199,6 +199,12 @@ async function initializeDb() {
       title TEXT
     )`);
 
+    await executeQuery(`CREATE TABLE IF NOT EXISTS task_images (
+      filename TEXT PRIMARY KEY,
+      mimetype TEXT,
+      data TEXT
+    )`);
+
     // Check and seed users if empty
     const userRows = await executeQuery('SELECT COUNT(*) as count FROM users');
     const userCount = userRows && userRows[0] ? parseInt(userRows[0].count || userRows[0].COUNT || Object.values(userRows[0])[0] || 0, 10) : 0;
@@ -476,17 +482,20 @@ app.post('/api/upload', async (req, res) => {
       return res.status(400).json({ error: 'No image provided' });
     }
     let ext = 'png';
-    let buffer;
+    let mimetype = 'image/png';
+    let base64Data = '';
     
     const matches = image.match(/^data:([A-Za-z-+\/]+);base64,([\s\S]+)$/);
     if (matches && matches.length === 3) {
-      ext = matches[1].split('/')[1] || 'png';
+      mimetype = matches[1];
+      ext = mimetype.split('/')[1] || 'png';
       if (ext === 'jpeg') ext = 'jpg';
-      buffer = Buffer.from(matches[2].replace(/\s/g, ''), 'base64');
+      base64Data = matches[2].replace(/\s/g, '');
     } else {
-      buffer = Buffer.from(image.replace(/\s/g, ''), 'base64');
+      base64Data = image.replace(/\s/g, '');
     }
     const filename = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+    const buffer = Buffer.from(base64Data, 'base64');
     
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       const blob = await put(`uploads/${filename}`, buffer, {
@@ -494,16 +503,46 @@ app.post('/api/upload', async (req, res) => {
       });
       return res.json({ url: blob.url });
     } else {
-      const targetDir = path.join(__dirname, 'public', 'uploads');
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+      try {
+        const targetDir = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(targetDir, filename), buffer);
+        return res.json({ url: `/uploads/${filename}` });
+      } catch (fsErr) {
+        console.warn('Local filesystem write failed, falling back to database storage:', fsErr.message);
+        await executeQuery(
+          'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
+          [filename, mimetype, base64Data]
+        );
+        return res.json({ url: `/api/uploads/${filename}` });
       }
-      fs.writeFileSync(path.join(targetDir, filename), buffer);
-      return res.json({ url: `/uploads/${filename}` });
     }
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Failed to upload image', details: err.message, stack: err.stack });
+  }
+});
+
+// Route to serve uploaded images stored in the database
+app.get('/api/uploads/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const rows = await executeQuery('SELECT mimetype, data FROM task_images WHERE filename = ?', [filename]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).send('File not found');
+    }
+    const row = rows[0];
+    const mimetype = row.mimetype || row.MIMETYPE || row.mimeType || 'image/png';
+    const data = row.data || row.DATA;
+    const buffer = Buffer.from(data, 'base64');
+    res.setHeader('Content-Type', mimetype);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    res.send(buffer);
+  } catch (err) {
+    console.error('Serve file error:', err);
+    res.status(500).send('Internal server error');
   }
 });
 
@@ -840,7 +879,7 @@ function getImageUrlsFromDescription(description) {
   return urls;
 }
 
-// Helper to delete an image file from local uploads or Vercel Blob
+// Helper to delete an image file from local uploads, database, or Vercel Blob
 function deleteUploadFile(fileUrl) {
   if (!fileUrl) return;
   if (fileUrl.startsWith('/uploads/')) {
@@ -854,6 +893,15 @@ function deleteUploadFile(fileUrl) {
         console.error(`Failed to delete local file ${filepath}:`, err);
       }
     }
+  } else if (fileUrl.startsWith('/api/uploads/')) {
+    const filename = fileUrl.replace('/api/uploads/', '');
+    executeQuery('DELETE FROM task_images WHERE filename = ?', [filename])
+      .then(() => {
+        console.log(`Deleted database file: ${filename}`);
+      })
+      .catch((err) => {
+        console.error(`Failed to delete database file ${filename}:`, err);
+      });
   } else if (fileUrl.includes('vercel-storage.com') || fileUrl.includes('public.blob.vercel-storage.com')) {
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       import('@vercel/blob').then(({ del }) => {
