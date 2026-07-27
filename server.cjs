@@ -489,14 +489,11 @@ app.post('/api/upload', async (req, res) => {
     const filename = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
     
     if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const { put } = await import('@vercel/blob');
       const blob = await put(`uploads/${filename}`, buffer, {
         access: 'public',
       });
       return res.json({ url: blob.url });
     } else {
-      const fs = await import('fs');
-      const path = await import('path');
       const targetDir = path.join(__dirname, 'public', 'uploads');
       if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
@@ -506,7 +503,7 @@ app.post('/api/upload', async (req, res) => {
     }
   } catch (err) {
     console.error('Upload error:', err);
-    res.status(500).json({ error: 'Failed to upload image' });
+    res.status(500).json({ error: 'Failed to upload image', details: err.message, stack: err.stack });
   }
 });
 

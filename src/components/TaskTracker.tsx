@@ -499,9 +499,16 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                           body: JSON.stringify({ image: base64 })
                         });
                       })
-                      .then((res) => {
+                      .then(async (res) => {
                         if (!res.ok) {
-                          throw new Error(`Upload server error: ${res.status}`);
+                          let errorMsg = `Upload server error: ${res.status}`;
+                          try {
+                            const errData = await res.json();
+                            if (errData && errData.details) {
+                              errorMsg = `${errorMsg} (${errData.details})`;
+                            }
+                          } catch (e) {}
+                          throw new Error(errorMsg);
                         }
                         return res.json();
                       })
@@ -1126,7 +1133,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   onClick={() => setEditingProjectId(true)} 
                   style={{ 
                     cursor: 'pointer', 
-                    padding: '8px 12px', 
+                    padding: editingProjectId ? '0px' : '8px 12px', 
                     borderRadius: '8px', 
                     border: '1px solid var(--border-color)', 
                     backgroundColor: '#ffffff',
@@ -1138,7 +1145,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   }}
                   title="Натисніть, щоб змінити проєкт"
                 >
-                  <Text size="xs" fw={700} c="dimmed" mb="2px">ПРОЄКТ</Text>
+                  <Text size="xs" fw={700} c="dimmed" style={{ margin: editingProjectId ? '8px 12px 2px 12px' : '0 0 2px 0' }}>ПРОЄКТ</Text>
                   {editingProjectId ? (
                     <Select
                       data={[
@@ -1172,8 +1179,18 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       placeholder="Пошук проєкту..."
                       variant="unstyled"
                       comboboxProps={{ width: 'target', dropdownPadding: 4, zIndex: 1000 }}
+                      leftSection={
+                        <div style={{ 
+                          width: '8px', 
+                          height: '8px', 
+                          borderRadius: '50%', 
+                          backgroundColor: currentProjectColor || 'indigo',
+                          marginLeft: '12px' 
+                        }} />
+                      }
+                      leftSectionPointerEvents="none"
                       styles={{ 
-                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
+                        input: { height: '24px', minHeight: '24px', paddingLeft: '28px', paddingRight: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
                         root: { width: '100%' },
                         wrapper: { width: '100%' }
                       }}
@@ -1201,7 +1218,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   onClick={() => setEditingDesignerId(true)} 
                   style={{ 
                     cursor: 'pointer', 
-                    padding: '8px 12px', 
+                    padding: editingDesignerId ? '0px' : '8px 12px', 
                     borderRadius: '8px', 
                     border: '1px solid var(--border-color)', 
                     backgroundColor: '#ffffff',
@@ -1213,7 +1230,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   }}
                   title="Натисніть, щоб змінити виконавця"
                 >
-                  <Text size="xs" fw={700} c="dimmed" mb="2px">ВИКОНАВЕЦЬ</Text>
+                  <Text size="xs" fw={700} c="dimmed" style={{ margin: editingDesignerId ? '8px 12px 2px 12px' : '0 0 2px 0' }}>ВИКОНАВЕЦЬ</Text>
                   {editingDesignerId ? (
                     <Select
                       data={selectAssigneeData}
@@ -1230,8 +1247,17 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       defaultDropdownOpened
                       variant="unstyled"
                       comboboxProps={{ width: 'target', dropdownPadding: 4, zIndex: 1000 }}
+                      leftSection={currentDesigner ? (() => {
+                        const isBase64 = currentDesigner.avatar && (currentDesigner.avatar.startsWith('data:image/') || currentDesigner.avatar.startsWith('http') || currentDesigner.avatar.startsWith('/'));
+                        return (
+                          <Avatar size="xs" src={isBase64 ? currentDesigner.avatar : undefined} color="indigo" radius="xl" style={{ marginLeft: '12px' }}>
+                            {!isBase64 && currentDesigner.avatar}
+                          </Avatar>
+                        );
+                      })() : null}
+                      leftSectionPointerEvents="none"
                       styles={{ 
-                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
+                        input: { height: '24px', minHeight: '24px', paddingLeft: currentDesigner ? '40px' : '12px', paddingRight: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
                         root: { width: '100%' },
                         wrapper: { width: '100%' }
                       }}
