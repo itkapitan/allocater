@@ -242,6 +242,16 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     });
   };
 
+  // Convert File object to raw base64 string (fallback if Canvas compression fails)
+  const getRawBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Convert HTML or plain text descriptions into Editor.js blocks
   const parseDescriptionToEditorData = (desc: string) => {
     if (!desc) {
@@ -267,7 +277,40 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     };
   };
 
-  // Render Editor.js JSON data in View Mode
+  // Extract clean plain text summary for task preview cards
+  const getPlainTextFromDescription = (desc: string): string => {
+    if (!desc) return '';
+    const trimmed = desc.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const data = JSON.parse(trimmed);
+        if (data && data.blocks) {
+          const textParts: string[] = [];
+          data.blocks.forEach((block: any) => {
+            if (block.type === 'paragraph' || block.type === 'header') {
+              textParts.push(block.data?.text || '');
+            } else if (block.type === 'list') {
+              const items = block.data?.items || [];
+              items.forEach((item: any) => {
+                if (typeof item === 'string') {
+                  textParts.push(item);
+                } else if (item && typeof item === 'object') {
+                  textParts.push(item.content || '');
+                }
+              });
+            }
+          });
+          const combined = textParts.join(' ');
+          return combined.replace(/<[^>]*>/g, '');
+        }
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return trimmed.replace(/<[^>]*>/g, '');
+  };
+
+  // Render Editor.js JSON data in View Mode (handles standard and nested lists recursively)
   const renderEditorJSData = (jsonStr: string) => {
     if (!jsonStr) {
       return (
@@ -320,9 +363,34 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   dangerouslySetInnerHTML={{ __html: block.data.text }}
                 />
               );
-            case 'list':
+            case 'list': {
               const isNumbered = block.data.style === 'ordered';
               const ListTag = isNumbered ? 'ol' : 'ul';
+              
+              const renderListItems = (items: any[]) => {
+                return items.map((item: any, itemIdx: number) => {
+                  if (typeof item === 'string') {
+                    return (
+                      <li key={itemIdx} dangerouslySetInnerHTML={{ __html: item }} style={{ marginBottom: '4px' }} />
+                    );
+                  } else if (item && typeof item === 'object') {
+                    const content = item.content || '';
+                    const subItems = item.items || [];
+                    return (
+                      <li key={itemIdx} style={{ marginBottom: '4px' }}>
+                        <span dangerouslySetInnerHTML={{ __html: content }} />
+                        {subItems.length > 0 && (
+                          <ListTag style={{ paddingLeft: '20px', marginTop: '4px', listStyleType: isNumbered ? 'decimal' : 'disc' }}>
+                            {renderListItems(subItems)}
+                          </ListTag>
+                        )}
+                      </li>
+                    );
+                  }
+                  return null;
+                });
+              };
+
               return (
                 <ListTag 
                   key={idx} 
@@ -334,11 +402,10 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                     fontSize: '14px'
                   }}
                 >
-                  {block.data.items.map((item: string, itemIdx: number) => (
-                    <li key={itemIdx} dangerouslySetInnerHTML={{ __html: item }} style={{ marginBottom: '4px' }} />
-                  ))}
+                  {renderListItems(block.data.items || [])}
                 </ListTag>
               );
+            }
             case 'image':
               const imgUrl = block.data.file?.url || '';
               const caption = block.data.caption || '';
@@ -395,6 +462,10 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                 uploader: {
                   uploadByFile(file: File) {
                     return compressAndConvertToWebp(file)
+                      .catch((err) => {
+                        console.warn('WebP compression failed, uploading raw file instead:', err);
+                        return getRawBase64(file);
+                      })
                       .then((base64) => {
                         return fetch('/api/upload', {
                           method: 'POST',
@@ -402,14 +473,22 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                           body: JSON.stringify({ image: base64 })
                         });
                       })
-                      .then((res) => res.json())
+                      .then((res) => {
+                        if (!res.ok) {
+                          throw new Error(`Upload server error: ${res.status}`);
+                        }
+                        return res.json();
+                      })
                       .then((data) => {
-                        return {
-                          success: 1,
-                          file: {
-                            url: data.url
-                          }
-                        };
+                        if (data && data.url) {
+                          return {
+                            success: 1,
+                            file: {
+                              url: data.url
+                            }
+                          };
+                        }
+                        throw new Error('No URL returned from upload server');
                       })
                       .catch((err) => {
                         console.error('Image upload failed:', err);
@@ -687,7 +766,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
                                           {task.description && (
                                             <Text size="xs" c="dimmed" lineClamp={2} style={{ lineHeight: 1.4 }}>
-                                              {task.description.replace(/<[^>]*>/g, '')}
+                                              {getPlainTextFromDescription(task.description)}
                                             </Text>
                                           )}
 
