@@ -468,6 +468,43 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
+// Generic base64 image upload route for tasks body/description editor
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: 'No image provided' });
+    }
+    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'Invalid base64 image format' });
+    }
+    const ext = matches[1].split('/')[1] || 'png';
+    const buffer = Buffer.from(matches[2], 'base64');
+    const filename = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+    
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const { put } = await import('@vercel/blob');
+      const blob = await put(`uploads/${filename}`, buffer, {
+        access: 'public',
+      });
+      return res.json({ url: blob.url });
+    } else {
+      const fs = await import('fs');
+      const path = await import('path');
+      const targetDir = path.join(__dirname, 'public', 'uploads');
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(targetDir, filename), buffer);
+      return res.json({ url: `/uploads/${filename}` });
+    }
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Failed to upload image' });
+  }
+});
+
 // Project CRUD
 app.post('/api/projects', async (req, res) => {
   const { id, name, color, memberIds, spaceId } = req.body;

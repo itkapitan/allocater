@@ -19,7 +19,6 @@ import {
   Avatar,
   Tooltip,
   Badge,
-  Anchor,
   FileButton,
   Divider,
   ColorInput
@@ -28,12 +27,11 @@ import {
   IconPlus,
   IconTrash,
   IconPencil,
-  IconLink,
-  IconPaperclip,
-  IconExternalLink,
-  IconFile,
   IconFolderPlus,
-  IconNotebook
+  IconNotebook,
+  IconPhoto,
+  IconLink,
+  IconPaperclip
 } from '@tabler/icons-react';
 import type { User, Project, Allocation } from '../types';
 
@@ -76,10 +74,10 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   onAddCard,
   onUpdateCard,
   onDeleteCard,
-  onAddAttachment,
-  onDeleteAttachment,
-  onAddLink,
-  onDeleteLink,
+  onAddAttachment: _onAddAttachment,
+  onDeleteAttachment: _onDeleteAttachment,
+  onAddLink: _onAddLink,
+  onDeleteLink: _onDeleteLink,
   onAddProject
 }) => {
   // Filter columns and tasks for active space
@@ -112,10 +110,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const [draftDesc, setDraftDesc] = useState('');
   const [draftProjectId, setDraftProjectId] = useState('');
   const [draftDesignerId, setDraftDesignerId] = useState<string | null>('');
-  
-  // Link & File draft forms
-  const [newLinkUrl, setNewLinkUrl] = useState('');
-  const [newLinkTitle, setNewLinkTitle] = useState('');
   
   // Custom minimal rich text state helper
   const descriptionEditorRef = useRef<HTMLDivElement>(null);
@@ -185,6 +179,65 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     }
   };
 
+  // Edit mode flags for modal fields
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState(false);
+  const [editingDesignerId, setEditingDesignerId] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+
+  // Autosave handler
+  const handleAutosave = (overrideFields?: any) => {
+    if (!selectedTask) return;
+    const updatedFields = {
+      title: draftTitle,
+      description: draftDesc,
+      projectId: draftProjectId,
+      designerId: draftDesignerId || null,
+      ...overrideFields
+    };
+
+    onUpdateCard(selectedTask.id, updatedFields);
+    setSelectedTask((prev: any) => prev ? { ...prev, ...updatedFields } : null);
+  };
+
+  // Image Upload handler
+  const handleImageUpload = (file: File | null) => {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64Image = e.target?.result as string;
+      if (!base64Image) return;
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const imgUrl = data.url;
+          const imgHtml = `<img src="${imgUrl}" alt="${file.name}" style="max-width: 100%; border-radius: 8px; margin: 8px 0; display: block; box-shadow: var(--shadow-sm);" />`;
+          
+          const el = descriptionEditorRef.current;
+          if (el) {
+            el.focus();
+            document.execCommand('insertHTML', false, imgHtml);
+            setDraftDesc(el.innerHTML);
+            handleAutosave({ description: el.innerHTML });
+          }
+        } else {
+          console.error('Failed to upload image to server');
+        }
+      } catch (err) {
+        console.error('Error uploading image:', err);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Open Task details modal
   const handleOpenTask = (task: any) => {
     setSelectedTask(task);
@@ -192,6 +245,13 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     setDraftDesc(task.description || '');
     setDraftProjectId(task.projectId);
     setDraftDesignerId(task.designerId);
+
+    const isNew = task.title === 'Нова задача';
+    setEditingTitle(isNew);
+    setEditingProjectId(isNew);
+    setEditingDesignerId(isNew);
+    setEditingDesc(isNew);
+
     setTaskModalOpened(true);
   };
 
@@ -598,277 +658,359 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
       <Modal
         opened={taskModalOpened}
         onClose={() => {
-          setTaskModalOpened(false);
-          setSelectedTask(null);
+          handleSaveTaskDetails();
         }}
-        title={<TextInput variant="unstyled" fw={800} size="md" value={draftTitle} onChange={(e) => setDraftTitle(e.currentTarget.value)} styles={{ input: { fontSize: '18px', fontWeight: 800, padding: 0 } }} />}
+        title={
+          editingTitle ? (
+            <TextInput
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.currentTarget.value)}
+              onBlur={() => {
+                setEditingTitle(false);
+                handleAutosave({ title: draftTitle });
+              }}
+              autoFocus
+              variant="unstyled"
+              styles={{ input: { fontSize: '18px', fontWeight: 800, padding: 0, borderBottom: '1px solid var(--primary-color)' } }}
+              style={{ width: '350px' }}
+            />
+          ) : (
+            <Text
+              fw={800}
+              size="lg"
+              style={{
+                fontSize: '18px',
+                fontFamily: 'var(--font-family)',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                borderRadius: '4px',
+                border: '1px dashed transparent',
+              }}
+              onClick={() => setEditingTitle(true)}
+              title="Натисніть для редагування заголовка"
+            >
+              {draftTitle || 'Нова задача'}
+            </Text>
+          )
+        }
         centered
         size="lg"
         radius="md"
       >
-        {selectedTask && (
-          <Stack gap="md" style={{ overflow: 'visible' }}>
-            <Group grow gap="md">
-              <Select
-                label="Проєкт"
-                data={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
-                value={draftProjectId}
-                onChange={(val) => {
-                  if (val) {
-                    setDraftProjectId(val);
-                    // Reset designer if they are not in the new project
-                    const proj = projects.find((p) => p.id === val);
-                    if (proj && draftDesignerId && !proj.memberIds.includes(draftDesignerId)) {
-                      setDraftDesignerId(null);
-                    }
-                  }
-                }}
-                required
-              />
+        {selectedTask && (() => {
+          const currentProject = projects.find((p) => p.id === draftProjectId);
+          const currentProjectName = currentProject ? currentProject.name : 'Не обрано';
+          const currentProjectColor = currentProject ? currentProject.color : 'indigo';
+          const currentDesigner = users.find((u) => u.id === draftDesignerId);
 
-              <Select
-                label="Виконавець (Дизайнер)"
-                data={[
-                  { value: '', label: 'Не призначено' },
-                  ...users
-                    .filter((u) => {
-                      const proj = projects.find((p) => p.id === draftProjectId);
-                      return proj ? proj.memberIds.includes(u.id) : false;
-                    })
-                    .map((d) => ({
-                      value: d.id,
-                      label: `${d.name} ${getDesignerHoursInfo(d.id, draftProjectId)}`
-                    }))
-                ]}
-                value={draftDesignerId || ''}
-                onChange={(val) => setDraftDesignerId(val || null)}
-                placeholder="Виберіть виконавця"
-              />
-            </Group>
-
-            {/* Inline Project creation helper */}
-            <Group justify="flex-start">
-              <Button
-                variant="subtle"
-                color="indigo"
-                size="xs"
-                leftSection={<IconFolderPlus size={14} />}
-                onClick={() => setNewProjectModalOpened(true)}
-              >
-                Створити новий проєкт
-              </Button>
-            </Group>
-
-            {/* Description HTML contenteditable visual editor */}
-            <Text fw={700} size="xs" c="dimmed" mt="xs">ОПИС ЗАДАЧІ (MICRO FORMATTING)</Text>
-            <Stack gap="2px">
-              <Group gap="xs" style={{ border: '1px solid var(--border-color)', borderBottom: 0, padding: '6px 12px', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', backgroundColor: '#f8fafc' }}>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="indigo"
-                  onClick={() => {
-                    const el = descriptionEditorRef.current;
-                    if (el) {
-                      document.execCommand('bold', false);
-                      setDraftDesc(el.innerHTML);
-                    }
-                  }}
-                  style={{ height: '24px', padding: '0 6px' }}
-                >
-                  <strong>B</strong>
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="indigo"
-                  onClick={() => {
-                    const el = descriptionEditorRef.current;
-                    if (el) {
-                      document.execCommand('italic', false);
-                      setDraftDesc(el.innerHTML);
-                    }
-                  }}
-                  style={{ height: '24px', padding: '0 6px' }}
-                >
-                  <em>I</em>
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="indigo"
-                  onClick={() => {
-                    const el = descriptionEditorRef.current;
-                    if (el) {
-                      document.execCommand('insertUnorderedList', false);
-                      setDraftDesc(el.innerHTML);
-                    }
-                  }}
-                  style={{ height: '24px', padding: '0 6px' }}
-                >
-                  • Список
-                </Button>
-              </Group>
-              <div
-                ref={descriptionEditorRef}
-                contentEditable
-                onBlur={(e) => setDraftDesc(e.currentTarget.innerHTML)}
-                dangerouslySetInnerHTML={{ __html: selectedTask.description || '' }}
-                style={{
-                  minHeight: '120px',
-                  border: '1px solid var(--border-color)',
-                  borderBottomLeftRadius: '8px',
-                  borderBottomRightRadius: '8px',
-                  padding: '12px',
-                  outline: 'none',
-                  backgroundColor: '#ffffff',
-                  fontSize: '14px',
-                  lineHeight: 1.5
-                }}
-              />
-            </Stack>
-
-            <Divider my="sm" />
-
-            {/* Attachments Section */}
-            <Group justify="space-between" align="center">
-              <Text fw={700} size="sm" c="dimmed">ФАЙЛИ ТА ВКЛАДЕННЯ</Text>
-              <FileButton
-                onChange={(file) => {
-                  if (file) {
-                    // Simulating a dummy link to make it work offline or in SQLite
-                    const fileUrl = URL.createObjectURL(file);
-                    onAddAttachment(selectedTask.id, file.name, fileUrl);
-                  }
-                }}
-              >
-                {(props) => (
-                  <Button {...props} size="xs" variant="light" color="indigo" leftSection={<IconPaperclip size={14} />}>
-                    Додати файл
-                  </Button>
+          return (
+            <Stack gap="md" style={{ overflow: 'visible' }}>
+              <Group grow gap="md">
+                {/* Project Field (View / Edit) */}
+                {editingProjectId ? (
+                  <Select
+                    label="Проєкт"
+                    data={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
+                    value={draftProjectId}
+                    onChange={(val) => {
+                      if (val) {
+                        setDraftProjectId(val);
+                        const proj = projects.find((p) => p.id === val);
+                        let nextDesignerId = draftDesignerId;
+                        if (proj && draftDesignerId && !proj.memberIds.includes(draftDesignerId)) {
+                          nextDesignerId = null;
+                          setDraftDesignerId(null);
+                        }
+                        handleAutosave({ projectId: val, designerId: nextDesignerId });
+                        setEditingProjectId(false);
+                      }
+                    }}
+                    onBlur={() => setEditingProjectId(false)}
+                    autoFocus
+                    required
+                  />
+                ) : (
+                  <div 
+                    onClick={() => setEditingProjectId(true)} 
+                    style={{ 
+                      cursor: 'pointer', 
+                      padding: '8px 12px', 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border-color)', 
+                      backgroundColor: '#ffffff',
+                      transition: 'border-color 0.2s'
+                    }}
+                    title="Натисніть, щоб змінити проєкт"
+                  >
+                    <Text size="xs" fw={700} c="dimmed" mb="4px">ПРОЄКТ</Text>
+                    <Group gap="xs">
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentProjectColor || 'indigo' }} />
+                      <Text size="sm" fw={600} truncate>{currentProjectName}</Text>
+                    </Group>
+                  </div>
                 )}
-              </FileButton>
-            </Group>
 
-            <Stack gap="xs">
-              {attachments
-                .filter((a) => a.taskId === selectedTask.id)
-                .map((attach) => (
-                  <Group key={attach.id} justify="space-between" wrap="nowrap" style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <Group gap="sm" wrap="nowrap">
-                      <IconFile size={16} color="var(--primary-color)" />
-                      <Text size="xs" fw={600} style={{ wordBreak: 'break-all' }}>{attach.fileName}</Text>
-                    </Group>
-                    <Group gap="xs" style={{ flexShrink: 0 }}>
-                      <Anchor href={attach.fileUrl} target="_blank" download>
-                        <ActionIcon size="sm" variant="subtle" color="indigo">
-                          <IconExternalLink size={14} />
-                        </ActionIcon>
-                      </Anchor>
-                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => onDeleteAttachment(attach.id)}>
-                        <IconTrash size={14} />
-                      </ActionIcon>
-                    </Group>
-                  </Group>
-                ))}
-              {attachments.filter((a) => a.taskId === selectedTask.id).length === 0 && (
-                <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>Немає доданих файлів</Text>
+                {/* Assignee Field (View / Edit) */}
+                {editingDesignerId ? (
+                  <Select
+                    label="Виконавець (Дизайнер)"
+                    data={[
+                      { value: '', label: 'Не призначено' },
+                      ...users
+                        .filter((u) => {
+                          const proj = projects.find((p) => p.id === draftProjectId);
+                          return proj ? proj.memberIds.includes(u.id) : false;
+                        })
+                        .map((d) => ({
+                          value: d.id,
+                          label: `${d.name} ${getDesignerHoursInfo(d.id, draftProjectId)}`
+                        }))
+                    ]}
+                    value={draftDesignerId || ''}
+                    onChange={(val) => {
+                      const designerId = val || null;
+                      setDraftDesignerId(designerId);
+                      handleAutosave({ designerId });
+                      setEditingDesignerId(false);
+                    }}
+                    onBlur={() => setEditingDesignerId(false)}
+                    autoFocus
+                    placeholder="Виберіть виконавця"
+                  />
+                ) : (
+                  <div 
+                    onClick={() => setEditingDesignerId(true)} 
+                    style={{ 
+                      cursor: 'pointer', 
+                      padding: '8px 12px', 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border-color)', 
+                      backgroundColor: '#ffffff',
+                      transition: 'border-color 0.2s'
+                    }}
+                    title="Натисніть, щоб змінити виконавця"
+                  >
+                    <Text size="xs" fw={700} c="dimmed" mb="4px">ВИКОНАВЕЦЬ</Text>
+                    {currentDesigner ? (
+                      <Group gap="xs" wrap="nowrap">
+                        {(() => {
+                          const isBase64 = currentDesigner.avatar && (currentDesigner.avatar.startsWith('data:image/') || currentDesigner.avatar.startsWith('http') || currentDesigner.avatar.startsWith('/'));
+                          return (
+                            <Avatar size="xs" src={isBase64 ? currentDesigner.avatar : undefined} color="indigo" radius="xl">
+                              {!isBase64 && currentDesigner.avatar}
+                            </Avatar>
+                          );
+                        })()}
+                        <Text size="sm" fw={600} truncate>{currentDesigner.name}</Text>
+                        <Text size="10px" c="dimmed" style={{ flexShrink: 0 }}>
+                          ({getDesignerHoursInfo(currentDesigner.id, draftProjectId).split(' ').shift()} год)
+                        </Text>
+                      </Group>
+                    ) : (
+                      <Text size="sm" fw={600} c="dimmed">Не призначено</Text>
+                    )}
+                  </div>
+                )}
+              </Group>
+
+              {/* Inline Project creation helper - Only shown if editing project */}
+              {editingProjectId && (
+                <Group justify="flex-start">
+                  <Button
+                    variant="subtle"
+                    color="indigo"
+                    size="xs"
+                    leftSection={<IconFolderPlus size={14} />}
+                    onClick={() => setNewProjectModalOpened(true)}
+                  >
+                    Створити новий проєкт
+                  </Button>
+                </Group>
               )}
-            </Stack>
 
-            <Divider my="sm" />
+              {/* Description HTML contenteditable visual editor (View / Edit) */}
+              <Text fw={700} size="xs" c="dimmed" mt="xs">ОПИС ЗАДАЧІ</Text>
+              
+              {editingDesc ? (
+                <Stack gap="xs">
+                  <div className="rich-editor-container" style={{ borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+                    {/* Toolbar */}
+                    <Group gap="xs" style={{ borderBottom: '1px solid var(--border-color)', padding: '6px 12px', backgroundColor: '#f8fafc' }}>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="indigo"
+                        onClick={() => {
+                          const el = descriptionEditorRef.current;
+                          if (el) {
+                            document.execCommand('bold', false);
+                            setDraftDesc(el.innerHTML);
+                          }
+                        }}
+                        style={{ height: '24px', padding: '0 6px' }}
+                      >
+                        <strong>B</strong>
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="indigo"
+                        onClick={() => {
+                          const el = descriptionEditorRef.current;
+                          if (el) {
+                            document.execCommand('italic', false);
+                            setDraftDesc(el.innerHTML);
+                          }
+                        }}
+                        style={{ height: '24px', padding: '0 6px' }}
+                      >
+                        <em>I</em>
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="indigo"
+                        onClick={() => {
+                          const el = descriptionEditorRef.current;
+                          if (el) {
+                            document.execCommand('insertUnorderedList', false);
+                            setDraftDesc(el.innerHTML);
+                          }
+                        }}
+                        style={{ height: '24px', padding: '0 6px' }}
+                      >
+                        • Список
+                      </Button>
 
-            {/* External Links Section */}
-            <Text fw={700} size="sm" c="dimmed">ВНЕШНІ ПОСИЛАННЯ</Text>
-            <Group grow gap="xs" align="flex-end">
-              <TextInput
-                placeholder="Назва (напр., Макет Figma)"
-                value={newLinkTitle}
-                onChange={(e) => setNewLinkTitle(e.currentTarget.value)}
-                size="xs"
-              />
-              <TextInput
-                placeholder="URL посилання"
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.currentTarget.value)}
-                size="xs"
-              />
-              <Button
-                size="xs"
-                color="indigo"
-                onClick={() => {
-                  if (newLinkUrl.trim()) {
-                    onAddLink(
-                      selectedTask.id,
-                      newLinkUrl.trim(),
-                      newLinkTitle.trim() || newLinkUrl.trim()
-                    );
-                    setNewLinkUrl('');
-                    setNewLinkTitle('');
-                  }
-                }}
-                style={{ flexGrow: 0 }}
-              >
-                Додати
-              </Button>
-            </Group>
+                      <Divider orientation="vertical" h={16} />
 
-            <Stack gap="xs" mt="xs">
-              {links
-                .filter((l) => l.taskId === selectedTask.id)
-                .map((link) => (
-                  <Group key={link.id} justify="space-between" wrap="nowrap" style={{ padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <Group gap="sm" wrap="nowrap">
-                      <IconLink size={16} color="var(--primary-color)" />
-                      <Anchor href={link.url} target="_blank" size="xs" fw={600} style={{ wordBreak: 'break-all' }}>
-                        {link.title}
-                      </Anchor>
+                      {/* Image Upload Button */}
+                      <FileButton
+                        onChange={handleImageUpload}
+                        accept="image/*"
+                      >
+                        {(props) => (
+                          <Button
+                            {...props}
+                            size="xs"
+                            variant="subtle"
+                            color="indigo"
+                            leftSection={<IconPhoto size={14} />}
+                            style={{ height: '24px', padding: '0 6px' }}
+                          >
+                            Зображення
+                          </Button>
+                        )}
+                      </FileButton>
                     </Group>
-                    <ActionIcon size="sm" variant="subtle" color="red" onClick={() => onDeleteLink(link.id)} style={{ flexShrink: 0 }}>
-                      <IconTrash size={14} />
-                    </ActionIcon>
+
+                    {/* Editor Body */}
+                    <div
+                      ref={descriptionEditorRef}
+                      contentEditable
+                      onBlur={(e) => setDraftDesc(e.currentTarget.innerHTML)}
+                      dangerouslySetInnerHTML={{ __html: draftDesc }}
+                      style={{
+                        minHeight: '150px',
+                        padding: '12px',
+                        outline: 'none',
+                        backgroundColor: '#ffffff',
+                        fontSize: '14px',
+                        lineHeight: 1.5,
+                        maxHeight: '400px',
+                        overflowY: 'auto'
+                      }}
+                    />
+                  </div>
+
+                  <Group justify="flex-end" gap="xs">
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setDraftDesc(selectedTask.description || '');
+                        setEditingDesc(false);
+                      }}
+                    >
+                      Скасувати
+                    </Button>
+                    <Button
+                      size="xs"
+                      color="indigo"
+                      onClick={() => {
+                        const el = descriptionEditorRef.current;
+                        const content = el ? el.innerHTML : draftDesc;
+                        setDraftDesc(content);
+                        handleAutosave({ description: content });
+                        setEditingDesc(false);
+                      }}
+                    >
+                      Зберегти опис
+                    </Button>
                   </Group>
-                ))}
-              {links.filter((l) => l.taskId === selectedTask.id).length === 0 && (
-                <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>Немає доданих посилань</Text>
+                </Stack>
+              ) : (
+                <div 
+                  onClick={() => setEditingDesc(true)}
+                  style={{
+                    minHeight: '120px',
+                    cursor: 'pointer',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: '#fafbfc',
+                    transition: 'background-color 0.2s',
+                    fontSize: '14px',
+                    lineHeight: 1.6
+                  }}
+                  className="hover-editable-desc"
+                  title="Натисніть для редагування опису"
+                >
+                  {draftDesc ? (
+                    <div 
+                      className="rich-description-view" 
+                      dangerouslySetInnerHTML={{ __html: draftDesc }} 
+                      style={{
+                        wordBreak: 'break-word'
+                      }}
+                    />
+                  ) : (
+                    <Text c="dimmed" style={{ fontStyle: 'italic' }}>
+                      Немає опису. Натисніть тут, щоб додати деталі...
+                    </Text>
+                  )}
+                </div>
               )}
-            </Stack>
 
-            <Divider my="sm" />
+              <Divider my="xs" />
 
-            {/* Actions bottom */}
-            <Group justify="space-between">
-              <Button
-                color="red"
-                variant="light"
-                leftSection={<IconTrash size={14} />}
-                onClick={() => {
-                  onDeleteCard(selectedTask.id);
-                  setTaskModalOpened(false);
-                  setSelectedTask(null);
-                }}
-              >
-                Видалити задачу
-              </Button>
-
-              <Group gap="xs">
+              {/* Actions bottom */}
+              <Group justify="space-between">
                 <Button
-                  variant="subtle"
-                  color="gray"
+                  color="red"
+                  variant="light"
+                  leftSection={<IconTrash size={14} />}
                   onClick={() => {
+                    onDeleteCard(selectedTask.id);
                     setTaskModalOpened(false);
                     setSelectedTask(null);
                   }}
                 >
-                  Скасувати
+                  Виделити задачу
                 </Button>
-                <Button color="indigo" onClick={handleSaveTaskDetails}>
-                  Зберегти зміни
+
+                <Button 
+                  color="indigo" 
+                  onClick={handleSaveTaskDetails}
+                >
+                  Закрити
                 </Button>
               </Group>
-            </Group>
-          </Stack>
-        )}
+            </Stack>
+          );
+        })()}
       </Modal>
 
       {/* 4. Modal: Project Creation from Kanban Details */}
