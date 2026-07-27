@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Popover, NumberInput, Select, Button, Group, Stack, Text } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
 import type { Allocation, Project, User } from '../types';
@@ -18,8 +18,7 @@ interface AllocationBarProps {
   designers: User[];
   days: Date[];
   allocations: Allocation[];
-  designerCapacities: Record<string, number>;
-  onUpdateAllocation: (id: string, updated: Partial<Allocation>) => void;
+  onUpdateAllocation: (id: string, updated: Partial<Allocation>, commit?: boolean, revertValues?: Partial<Allocation>) => void;
   onDeleteAllocation: (id: string) => void;
   isAdmin: boolean;
   isSelected: boolean;
@@ -31,7 +30,6 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
   designers,
   days,
   allocations,
-  designerCapacities,
   onUpdateAllocation,
   onDeleteAllocation,
   isAdmin,
@@ -39,6 +37,17 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 }) => {
   const [popoverOpened, setPopoverOpened] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Локальное состояние полей ввода поповера (для отката изменений при конфликте)
+  const [localHours, setLocalHours] = useState(allocation.hours);
+  const [localDesignerId, setLocalDesignerId] = useState(allocation.designerId);
+
+  useEffect(() => {
+    if (!popoverOpened) {
+      setLocalHours(allocation.hours);
+      setLocalDesignerId(allocation.designerId);
+    }
+  }, [allocation.hours, allocation.designerId, popoverOpened]);
 
   // Parse dates
   const allocStart = new Date(allocation.startDate);
@@ -80,13 +89,12 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 
   if (startIdx === -1 || endIdx === -1) return null;
 
-  // Real-time Visual hours scaling based on designer capacity
-  const designerId = allocation.designerId;
-  const capacity = designerCapacities[designerId] || 8;
+  // Для визуального масштаба используем единую базу в 8 часов
+  const visualCapacityBase = 8;
 
-  // Percentage positioning with offsetHours support
+  // Расчет смещения на базе visualCapacityBase
   const offset = allocation.offsetHours || 0;
-  const leftPercent = ((startIdx + offset / capacity) / 7) * 100;
+  const leftPercent = ((startIdx + offset / visualCapacityBase) / 7) * 100;
 
   // Color Mapping
   const colorMap: Record<string, { track: string; fill: string; border: string }> = {
@@ -102,9 +110,9 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
   const designerColor = designer?.color || 'indigo';
   const colors = colorMap[designerColor] || colorMap.indigo;
 
-  const maxWeeklyHours = 7 * capacity; // Max hours represented by the full week width
+  const maxWeeklyHours = 7 * visualCapacityBase; // Макс часов за неделю на базе visualCapacityBase
 
-  // Width is percentage of hours allocated divided by max week hours (7 * capacity)
+  // Ширина рассчитывается от visualCapacityBase
   const widthPercent = (allocation.hours / maxWeeklyHours) * 100;
 
   // --- Move & Resize Event Handlers ---
@@ -121,17 +129,33 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     const initialOffsetHours = allocation.offsetHours || 0;
     const initialStart = new Date(allocation.startDate);
 
-    // Compute pixel width of 1 day in the grid cell
+    // Запоминаем исходные значения на случай отката при конфликте
+    const revertValues = {
+      startDate: allocation.startDate,
+      endDate: allocation.endDate,
+      offsetHours: allocation.offsetHours || 0,
+      hours: allocation.hours,
+    };
+
+    // Отслеживаем текущие значения при перетаскивании
+    let latestValues = {
+      startDate: allocation.startDate,
+      endDate: allocation.endDate,
+      offsetHours: allocation.offsetHours || 0,
+      hours: allocation.hours,
+    };
+
+    // Координаты рассчитываются на базе visualCapacityBase (8 часов)
     const parentWidth = containerRef.current?.parentElement?.getBoundingClientRect().width || 0;
     const colWidth = parentWidth / 7;
-    const pixelsPerHour = colWidth / capacity;
+    const pixelsPerHour = colWidth / visualCapacityBase;
 
-    // Helper to get range of an allocation in hours relative to weekStart
+    // Вспомогательная функция расчета часов относительно начала недели
     const getAllocationHoursRange = (alloc: Allocation) => {
       const aStart = new Date(alloc.startDate);
       const diffDays = Math.round((aStart.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
       const aOffset = alloc.offsetHours || 0;
-      const startHour = diffDays * capacity + aOffset;
+      const startHour = diffDays * visualCapacityBase + aOffset;
       return {
         startHour,
         endHour: startHour + alloc.hours,
@@ -142,7 +166,7 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     const initialStartHour = currentRange.startHour;
     const initialEndHour = currentRange.endHour;
 
-    // Boundary constraints: list all allocations of this designer in this project to avoid overlapping them
+    // Ограничиваем перетаскивание другими аллокациями дизайнера в этом же проекте
     const projectAllocations = allocations.filter(
       (a) => a.projectId === project.id && a.designerId === allocation.designerId && a.id !== allocation.id
     );
@@ -157,7 +181,8 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
-      
+      wasDraggedRef.current = true; // Фиксируем факт перетаскивания
+
       if (mode === 'resize-right') {
         const deltaHours = Math.round(deltaX / pixelsPerHour);
         const newHours = Math.max(1, initialHours + deltaHours);
@@ -168,14 +193,16 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
           .reduce((min, interval) => Math.min(min, interval.startHour), Infinity);
 
         if (newEndHour <= rightLimit) {
-          const durationDays = Math.ceil((initialOffsetHours + newHours) / capacity);
+          const durationDays = Math.ceil((initialOffsetHours + newHours) / visualCapacityBase);
           const newEnd = new Date(initialStart);
           newEnd.setDate(initialStart.getDate() + durationDays - 1);
           
-          onUpdateAllocation(allocation.id, {
+          const updated = {
             endDate: formatDateString(newEnd),
             hours: newHours,
-          });
+          };
+          latestValues = { ...latestValues, ...updated };
+          onUpdateAllocation(allocation.id, updated, false);
         }
       } 
       else if (mode === 'resize-left') {
@@ -188,20 +215,22 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
           .reduce((max, interval) => Math.max(max, interval.endHour), -Infinity);
 
         if (newHours >= 1 && newStartHour >= leftLimit) {
-          let totalOffsetDays = Math.floor(newStartHour / capacity);
-          let newOffsetHours = newStartHour % capacity;
+          let totalOffsetDays = Math.floor(newStartHour / visualCapacityBase);
+          let newOffsetHours = newStartHour % visualCapacityBase;
           if (newOffsetHours < 0) {
-            newOffsetHours += capacity;
+            newOffsetHours += visualCapacityBase;
           }
 
           const newStart = new Date(weekStart);
           newStart.setDate(weekStart.getDate() + totalOffsetDays);
 
-          onUpdateAllocation(allocation.id, {
+          const updated = {
             startDate: formatDateString(newStart),
             offsetHours: newOffsetHours,
             hours: newHours,
-          });
+          };
+          latestValues = { ...latestValues, ...updated };
+          onUpdateAllocation(allocation.id, updated, false);
         }
       } 
       else if (mode === 'move') {
@@ -218,24 +247,26 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
           .reduce((min, interval) => Math.min(min, interval.startHour), Infinity);
 
         if (newStartHour >= leftLimit && newEndHour <= rightLimit) {
-          let totalOffsetDays = Math.floor(newStartHour / capacity);
-          let newOffsetHours = newStartHour % capacity;
+          let totalOffsetDays = Math.floor(newStartHour / visualCapacityBase);
+          let newOffsetHours = newStartHour % visualCapacityBase;
           if (newOffsetHours < 0) {
-            newOffsetHours += capacity;
+            newOffsetHours += visualCapacityBase;
           }
 
           const newStart = new Date(weekStart);
           newStart.setDate(weekStart.getDate() + totalOffsetDays);
 
-          const durationDays = Math.ceil((newOffsetHours + initialHours) / capacity);
+          const durationDays = Math.ceil((newOffsetHours + initialHours) / visualCapacityBase);
           const newEnd = new Date(newStart);
           newEnd.setDate(newStart.getDate() + durationDays - 1);
 
-          onUpdateAllocation(allocation.id, {
+          const updated = {
             startDate: formatDateString(newStart),
             endDate: formatDateString(newEnd),
             offsetHours: newOffsetHours,
-          });
+          };
+          latestValues = { ...latestValues, ...updated };
+          onUpdateAllocation(allocation.id, updated, false);
         }
       }
     };
@@ -243,6 +274,9 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      
+      // Завершаем перетаскивание и проверяем наложение
+      onUpdateAllocation(allocation.id, latestValues, true, revertValues);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -250,6 +284,16 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
   };
 
   const wasDraggedRef = useRef(false);
+
+  const handleSaveClick = () => {
+    onUpdateAllocation(
+      allocation.id,
+      { hours: localHours, designerId: localDesignerId },
+      true,
+      { hours: allocation.hours, designerId: allocation.designerId } // revertValues
+    );
+    setPopoverOpened(false);
+  };
 
   return (
     <div ref={containerRef}>
@@ -303,7 +347,13 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
         >
           <Popover
             opened={isAdmin && popoverOpened}
-            onChange={setPopoverOpened}
+            onChange={(opened) => {
+              setPopoverOpened(opened);
+              if (opened) {
+                setLocalHours(allocation.hours);
+                setLocalDesignerId(allocation.designerId);
+              }
+            }}
             width={260}
             position="bottom"
             withArrow
@@ -374,8 +424,8 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                 
                 <NumberInput
                   label="Заплановано годин"
-                  value={allocation.hours}
-                  onChange={(val) => onUpdateAllocation(allocation.id, { hours: Number(val) || 0 })}
+                  value={localHours}
+                  onChange={(val) => setLocalHours(Number(val) || 0)}
                   min={1}
                   max={168}
                   required
@@ -383,9 +433,9 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
 
                 <Select
                   label="Виконавець (Дизайнер)"
-                  value={allocation.designerId}
+                  value={localDesignerId}
                   data={designers.map((d) => ({ value: d.id, label: d.name }))}
-                  onChange={(val) => val && onUpdateAllocation(allocation.id, { designerId: val })}
+                  onChange={(val) => val && setLocalDesignerId(val)}
                 />
 
                 <Group justify="space-between" mt="xs">
@@ -401,7 +451,7 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
                   >
                     Видалити
                   </Button>
-                  <Button size="xs" color="indigo" onClick={() => setPopoverOpened(false)}>
+                  <Button size="xs" color="indigo" onClick={handleSaveClick}>
                     Зберегти
                   </Button>
                 </Group>

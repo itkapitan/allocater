@@ -4,6 +4,7 @@ import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
+import { validateAllocation } from '../App';
 
 // Helper to compute lanes for a project's allocations
 const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
@@ -75,7 +76,7 @@ interface CalendarGridProps {
   onRemoveProjectMember: (projectId: string, userId: string) => void;
   onReplaceProjectMember: (projectId: string, oldUserId: string, newUserId: string) => void;
   onAddAllocation: (allocation: Omit<Allocation, 'id'>) => void;
-  onUpdateAllocation: (id: string, updated: Partial<Allocation>) => void;
+  onUpdateAllocation: (id: string, updated: Partial<Allocation>, commit?: boolean, revertValues?: Partial<Allocation>) => void;
   onDeleteAllocation: (id: string) => void;
   onUpdateProjectsList: (newList: Project[]) => void;
   onSaveProjectsOrder: (orderedIds: string[]) => void;
@@ -352,37 +353,59 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     if (designers.length === 0) return;
 
     const startDateStr = formatDateString(days[dayIdx]);
-    const endDateStr = formatDateString(days[dayIdx]); // 1 day duration
-    const startDateObj = new Date(startDateStr);
-    const endDateObj = new Date(endDateStr);
+    const endDateStr = formatDateString(days[dayIdx]); // 1 день
 
-    // Find which designers are occupied on this day
-    const occupiedOnDay = new Set<string>();
-    allocations
-      .filter((a) => a.projectId === projectId)
-      .forEach((alloc) => {
-        const aStart = new Date(alloc.startDate);
-        const aEnd = new Date(alloc.endDate);
-        if (!(endDateObj < aStart || startDateObj > aEnd)) {
-          occupiedOnDay.add(alloc.designerId);
+    // Пытаемся найти свободный временной интервал среди дизайнеров проекта.
+    // Приоритеты:
+    // 1. Весь рабочий день (hours = capacity, offset = 0)
+    // 2. Первая половина дня (hours = capacity / 2, offset = 0)
+    // 3. Вторая половина дня (hours = capacity / 2, offset = capacity / 2)
+    let bestAlloc: Omit<Allocation, 'id'> | null = null;
+
+    for (const designer of designers) {
+      const capacity = designerCapacities[designer.id] || 8;
+      
+      const options = [
+        { hours: capacity, offsetHours: 0 },
+        { hours: capacity / 2, offsetHours: 0 },
+        { hours: capacity / 2, offsetHours: capacity / 2 },
+      ];
+
+      for (const option of options) {
+        const proposed = {
+          projectId,
+          designerId: designer.id,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          hours: option.hours,
+          offsetHours: option.offsetHours,
+        };
+
+        const validation = validateAllocation(proposed, allocations, projects, designerCapacities);
+        if (validation.valid) {
+          bestAlloc = proposed;
+          break;
         }
-      });
-
-    // Find first designer who is NOT occupied
-    let targetDesigner = designers.find((d) => !occupiedOnDay.has(d.id));
-    // If all are occupied, fallback to first
-    if (!targetDesigner) {
-      targetDesigner = designers[0];
+      }
+      if (bestAlloc) break;
     }
 
-    if (targetDesigner) {
-      const capacity = designerCapacities[targetDesigner.id] || 8;
+    if (bestAlloc) {
+      onAddAllocation(bestAlloc);
+    } else {
+      // Если свободного места не найдено ни для одного из дизайнеров,
+      // по умолчанию создаем аллокацию на полный день для первого дизайнера.
+      // Это действие будет заблокировано в handleAddAllocation (App.tsx),
+      // которая вызовет информативное модальное окно с деталями пересечения.
+      const firstDesigner = designers[0];
+      const capacity = designerCapacities[firstDesigner.id] || 8;
       onAddAllocation({
         projectId,
-        designerId: targetDesigner.id,
+        designerId: firstDesigner.id,
         startDate: startDateStr,
         endDate: endDateStr,
-        hours: capacity, // 1 day capacity
+        hours: capacity,
+        offsetHours: 0,
       });
     }
   };
@@ -747,7 +770,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     designers={projectDesigners}
                                     days={days}
                                     allocations={allocations}
-                                    designerCapacities={designerCapacities}
                                     onUpdateAllocation={onUpdateAllocation}
                                     onDeleteAllocation={onDeleteAllocation}
                                     isAdmin={isAdmin}

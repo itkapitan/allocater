@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group } from '@mantine/core';
+import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group, Avatar } from '@mantine/core';
 import type { User, Project, Allocation, Space } from './types';
 import { DesignerHeader } from './components/DesignerHeader';
 import { CalendarGrid } from './components/CalendarGrid';
@@ -102,6 +102,119 @@ const parseUrlState = (pathname: string) => {
   return { parsedSpaceId, parsedWeekStart };
 };
 
+// Вспомогательный хелпер для форматирования даты в строку YYYY-MM-DD
+const formatDateStringHelper = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Расчет временных сегментов аллокации в течение дня
+const getAllocationIntervals = (alloc: Omit<Allocation, 'id'>, capacity: number) => {
+  const intervals: { date: string; start: number; end: number }[] = [];
+  let remainingHours = alloc.hours;
+  let currentOffset = alloc.offsetHours || 0;
+  let currentDate = new Date(alloc.startDate);
+
+  while (remainingHours > 0) {
+    const dateStr = formatDateStringHelper(currentDate);
+    const hoursOnThisDay = Math.min(remainingHours, capacity - currentOffset);
+    if (hoursOnThisDay <= 0) break;
+
+    intervals.push({
+      date: dateStr,
+      start: currentOffset,
+      end: currentOffset + hoursOnThisDay,
+    });
+
+    remainingHours -= hoursOnThisDay;
+    currentOffset = 0;
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return intervals;
+};
+
+// Валидация наложений по времени и лимита дневной доступности
+export const validateAllocation = (
+  proposedAlloc: Omit<Allocation, 'id'> & { id?: string },
+  allAllocations: Allocation[],
+  projects: Project[],
+  designerCapacities: Record<string, number>
+): { valid: boolean; reason?: 'overlap' | 'exceeds_capacity'; overlappingAlloc?: Allocation; overlappingProject?: Project } => {
+  const capacity = designerCapacities[proposedAlloc.designerId] || 8;
+  
+  // 1. Проверяем сегменты новой/обновленной аллокации
+  const proposedSegments = getAllocationIntervals(proposedAlloc, capacity);
+  
+  // Убеждаемся, что смогли распределить все часы. Если нет — это превышение доступности
+  const mappedHours = proposedSegments.reduce((sum, s) => sum + (s.end - s.start), 0);
+  if (mappedHours < proposedAlloc.hours) {
+    return { valid: false, reason: 'exceeds_capacity' };
+  }
+
+  // 2. Проверяем наложение на другие аллокации этого же дизайнера по всем проектам
+  const otherAllocations = allAllocations.filter(
+    (a) => a.designerId === proposedAlloc.designerId && a.id !== proposedAlloc.id
+  );
+
+  for (const otherAlloc of otherAllocations) {
+    const otherCapacity = designerCapacities[otherAlloc.designerId] || 8;
+    const otherSegments = getAllocationIntervals(otherAlloc, otherCapacity);
+
+    for (const propSeg of proposedSegments) {
+      for (const otherSeg of otherSegments) {
+        if (propSeg.date === otherSeg.date) {
+          const maxStart = Math.max(propSeg.start, otherSeg.start);
+          const minEnd = Math.min(propSeg.end, otherSeg.end);
+          if (maxStart < minEnd) {
+            const proj = projects.find((p) => p.id === otherAlloc.projectId);
+            return {
+              valid: false,
+              reason: 'overlap',
+              overlappingAlloc: otherAlloc,
+              overlappingProject: proj,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { valid: true };
+};
+
+// Красивое форматирование времени для украинского интерфейса конфликтов
+const formatAllocationTimeLabel = (alloc: Omit<Allocation, 'id'>, capacity: number): string => {
+  const dateObj = new Date(alloc.startDate);
+  const daysUa = ['Неділя', 'Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота'];
+  const monthsUa = [
+    'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+    'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
+  ];
+  
+  const dayName = daysUa[dateObj.getDay()];
+  const dayNum = dateObj.getDate();
+  const monthName = monthsUa[dateObj.getMonth()];
+  
+  const formattedDate = `${dayName}, ${dayNum} ${monthName}`;
+  const offset = alloc.offsetHours || 0;
+  const hours = alloc.hours;
+
+  let timeSlot = '';
+  if (hours >= capacity) {
+    timeSlot = 'весь день';
+  } else if (offset === 0 && hours === capacity / 2) {
+    timeSlot = 'перша половина дня';
+  } else if (offset === capacity / 2 && hours === capacity / 2) {
+    timeSlot = 'друга половина дня';
+  } else {
+    timeSlot = `з ${offset}-ї по ${offset + hours}-ту годину`;
+  }
+  
+  return `${formattedDate} (${timeSlot}, ${hours} год)`;
+};
+
 export const App: React.FC = () => {
   // --- Admin Authentication State ---
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -148,6 +261,16 @@ export const App: React.FC = () => {
   const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
   const [isSticky, setIsSticky] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // --- Состояние модального окна конфликтов распределения времени ---
+  const [conflictModal, setConflictModal] = useState<{
+    opened: boolean;
+    designer: User;
+    reason: 'overlap' | 'exceeds_capacity';
+    conflictingProject?: Project;
+    proposedDate: string;
+    proposedTimeLabel: string;
+  } | null>(null);
 
   // --- Spaces State ---
   const [spaces, setSpaces] = useState<Space[]>([]);
@@ -578,6 +701,24 @@ export const App: React.FC = () => {
     if (!isAdmin) return;
     const newId = `alloc-${Date.now()}`;
     const newAlloc: Allocation = { id: newId, ...allocData };
+
+    // Валидация новой аллокации
+    const validation = validateAllocation(newAlloc, allocations, projects, designerCapacities);
+    if (!validation.valid) {
+      const designer = users.find((u) => u.id === newAlloc.designerId);
+      if (designer) {
+        setConflictModal({
+          opened: true,
+          designer,
+          reason: validation.reason || 'overlap',
+          conflictingProject: validation.overlappingProject,
+          proposedDate: newAlloc.startDate,
+          proposedTimeLabel: formatAllocationTimeLabel(newAlloc, designerCapacities[newAlloc.designerId] || 8),
+        });
+      }
+      return;
+    }
+
     setAllocations((prev) => [...prev, newAlloc]);
 
     fetch('/api/allocations', {
@@ -587,17 +728,58 @@ export const App: React.FC = () => {
     }).catch((err) => console.error('Error adding allocation in SQLite:', err));
   };
 
-  const handleUpdateAllocation = (id: string, updated: Partial<Allocation>) => {
+  const handleUpdateAllocation = (
+    id: string,
+    updated: Partial<Allocation>,
+    commit = true,
+    revertValues?: Partial<Allocation>
+  ) => {
     if (!isAdmin) return;
+
+    if (commit) {
+      const currentAlloc = allocations.find((a) => a.id === id);
+      if (!currentAlloc) return;
+      const proposed = { ...currentAlloc, ...updated };
+
+      // Валидация предлагаемых изменений
+      const validation = validateAllocation(proposed, allocations, projects, designerCapacities);
+      if (!validation.valid) {
+        const designer = users.find((u) => u.id === proposed.designerId);
+        if (designer) {
+          setConflictModal({
+            opened: true,
+            designer,
+            reason: validation.reason || 'overlap',
+            conflictingProject: validation.overlappingProject,
+            proposedDate: proposed.startDate,
+            proposedTimeLabel: formatAllocationTimeLabel(proposed, designerCapacities[proposed.designerId] || 8),
+          });
+        }
+        
+        // Откатываем локальное состояние к исходному, если предоставлено revertValues
+        if (revertValues) {
+          setAllocations((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, ...revertValues } : a))
+          );
+        } else {
+          // Если нет revertValues, форсируем обновление состояния для ререндера
+          setAllocations((prev) => [...prev]);
+        }
+        return;
+      }
+    }
+
     setAllocations((prev) =>
       prev.map((a) => (a.id === id ? { ...a, ...updated } : a))
     );
 
-    fetch(`/api/allocations/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch((err) => console.error('Error updating allocation in SQLite:', err));
+    if (commit) {
+      fetch(`/api/allocations/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch((err) => console.error('Error updating allocation in SQLite:', err));
+    }
   };
 
   const handleDeleteAllocation = (id: string) => {
@@ -812,6 +994,64 @@ export const App: React.FC = () => {
                   </Group>
                 </>
               )}
+            </Stack>
+          )}
+        </Modal>
+
+        {/* Модальне вікно попередження про конфлікт */}
+        <Modal
+          opened={!!conflictModal?.opened}
+          onClose={() => setConflictModal(null)}
+          title={<span style={{ fontWeight: 800, fontSize: '16px', color: '#e03131', fontFamily: 'var(--font-family)' }}>Увага: Конфлікт розподілу часу</span>}
+          centered
+          radius="md"
+          size="md"
+          zIndex={99999}
+        >
+          {conflictModal && (
+            <Stack gap="md">
+              <Group gap="sm" style={{ padding: '12px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #ffe3e3' }}>
+                {(() => {
+                  const isBase64 = conflictModal.designer.avatar && (conflictModal.designer.avatar.startsWith('data:image/') || conflictModal.designer.avatar.startsWith('http') || conflictModal.designer.avatar.startsWith('/'));
+                  return (
+                    <Avatar
+                      size="md"
+                      radius="xl"
+                      src={isBase64 ? conflictModal.designer.avatar : undefined}
+                      color="indigo"
+                    >
+                      {!isBase64 && conflictModal.designer.avatar}
+                    </Avatar>
+                  );
+                })()}
+                <div>
+                  <Text fw={700} size="sm" style={{ fontFamily: 'var(--font-family)' }}>{conflictModal.designer.name}</Text>
+                  <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--font-family)' }}>{conflictModal.designer.role}</Text>
+                </div>
+              </Group>
+
+              {conflictModal.reason === 'overlap' ? (
+                <Text size="sm" style={{ lineHeight: 1.6, fontFamily: 'var(--font-family)' }}>
+                  Цей час уже зарезервовано на іншому проєкті:{' '}
+                  <strong style={{ color: '#4c6ef5' }}>
+                    {conflictModal.conflictingProject?.name}
+                  </strong>.
+                  <br />
+                  <span style={{ color: 'var(--text-muted)' }}>Заплановано: {conflictModal.proposedTimeLabel}</span>
+                </Text>
+              ) : (
+                <Text size="sm" style={{ lineHeight: 1.6, fontFamily: 'var(--font-family)' }}>
+                  Заплановані години перевищують денну доступність цього дизайнера ({designerCapacities[conflictModal.designer.id] || 8} год).
+                  <br />
+                  <span style={{ color: 'var(--text-muted)' }}>Спробуйте зменшити години або змінити зміщення.</span>
+                </Text>
+              )}
+
+              <Group justify="flex-end" mt="xs">
+                <Button color="red" onClick={() => setConflictModal(null)}>
+                  Зрозуміло
+                </Button>
+              </Group>
             </Stack>
           )}
         </Modal>
