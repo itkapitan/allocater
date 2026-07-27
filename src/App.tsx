@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group, Avatar } from '@mantine/core';
+import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group, Avatar, SegmentedControl, Select, Paper, Divider, TextInput, PasswordInput } from '@mantine/core';
 import type { User, Project, Allocation, Space } from './types';
 import { DesignerHeader } from './components/DesignerHeader';
 import { CalendarGrid } from './components/CalendarGrid';
 import { AddProjectRow } from './components/AddProjectRow';
 import { ManageUsersDrawer } from './components/ManageUsersDrawer';
 import { ManageSpacesDrawer } from './components/ManageSpacesDrawer';
+import { TaskTracker } from './components/TaskTracker';
+import { IconNotebook, IconFolder, IconUsers, IconLogout, IconLogin, IconShield } from '@tabler/icons-react';
 
 // Custom theme mapping
 const theme = createTheme({
@@ -64,19 +66,31 @@ const getWeekUrlSlug = (start: Date): string => {
 // Parser of URL slugs
 const parseUrlState = (pathname: string) => {
   const parts = pathname.split('/').filter(Boolean);
+  let section: 'allocator' | 'tasks' = 'allocator';
   let parsedSpaceId: string | null = null;
   let parsedWeekStart: Date | null = null;
 
+  let spaceSlugIdx = 0;
+  let weekSlugIdx = 1;
+
   if (parts.length >= 1) {
-    const spaceSlug = parts[0];
+    if (parts[0] === 'allocator' || parts[0] === 'tasks') {
+      section = parts[0];
+      spaceSlugIdx = 1;
+      weekSlugIdx = 2;
+    }
+  }
+
+  if (parts.length > spaceSlugIdx) {
+    const spaceSlug = parts[spaceSlugIdx];
     const match = spaceSlug.match(/^(\d+)/);
     if (match) {
       parsedSpaceId = match[1];
     }
   }
 
-  if (parts.length >= 2) {
-    const weekSlug = parts[1];
+  if (parts.length > weekSlugIdx) {
+    const weekSlug = parts[weekSlugIdx];
     let foundDate: Date | null = null;
     for (let y = 2025; y <= 2027; y++) {
       const tempDate = new Date(`${y}-01-01T00:00:00`);
@@ -99,7 +113,7 @@ const parseUrlState = (pathname: string) => {
     }
   }
 
-  return { parsedSpaceId, parsedWeekStart };
+  return { section, parsedSpaceId, parsedWeekStart };
 };
 
 // Вспомогательный хелпер для форматирования даты в строку YYYY-MM-DD
@@ -221,6 +235,27 @@ export const App: React.FC = () => {
     return sessionStorage.getItem('isAdmin_planner') === 'true';
   });
 
+  const [loginOpened, setLoginOpened] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsSubmitting(true);
+    const success = await handleLogin(email, password);
+    setIsSubmitting(false);
+    if (success) {
+      setLoginOpened(false);
+      setEmail('');
+      setPassword('');
+    } else {
+      setLoginError('Невірний email або пароль');
+    }
+  };
+
   const handleLogin = async (email: string, pass: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/login', {
@@ -262,6 +297,13 @@ export const App: React.FC = () => {
   const [isSticky, setIsSticky] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // --- Разделы и Канбан-трекер задач ---
+  const [activeSection, setActiveSection] = useState<'allocator' | 'tasks'>('allocator');
+  const [columns, setColumns] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [links, setLinks] = useState<any[]>([]);
+
   // --- Состояние модального окна конфликтов распределения времени ---
   const [conflictModal, setConflictModal] = useState<{
     opened: boolean;
@@ -276,8 +318,6 @@ export const App: React.FC = () => {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [activeSpaceId, setActiveSpaceId] = useState<string>('1');
   const [manageSpacesOpened, setManageSpacesOpened] = useState(false);
-
-  // --- Project Deletion States ---
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [deleteProjectModalOpened, setDeleteProjectModalOpened] = useState(false);
   const [projectHasAllocations, setProjectHasAllocations] = useState(false);
@@ -316,9 +356,11 @@ export const App: React.FC = () => {
 
   // Fetch initial data from SQLite Express Backend
   useEffect(() => {
-    fetch('/api/data')
-      .then((res) => res.json())
-      .then((data) => {
+    Promise.all([
+      fetch('/api/data').then((res) => res.json()),
+      fetch('/api/tasks/data').then((res) => res.json())
+    ])
+      .then(([data, tasksData]) => {
         setUsers(data.users || []);
         setProjects(data.projects || []);
         setAllocations(data.allocations || []);
@@ -327,8 +369,14 @@ export const App: React.FC = () => {
         const loadedSpaces = data.spaces || [];
         setSpaces(loadedSpaces);
 
+        setColumns(tasksData.columns || []);
+        setTasks(tasksData.tasks || []);
+        setAttachments(tasksData.attachments || []);
+        setLinks(tasksData.links || []);
+
         // Parse current URL
-        const { parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+        const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+        setActiveSection(section);
 
         let targetSpaceId = '1';
         if (parsedSpaceId && loadedSpaces.some((s: Space) => s.id === parsedSpaceId)) {
@@ -346,10 +394,15 @@ export const App: React.FC = () => {
         // Auto format current path cleanly
         const targetSpace = loadedSpaces.find((s: Space) => s.id === targetSpaceId) || loadedSpaces[0];
         if (targetSpace) {
-          const start = parsedWeekStart || new Date('2026-07-20T00:00:00');
           const spaceSlug = `${targetSpaceId}-${transliterate(targetSpace.name)}`;
-          const weekSlug = getWeekUrlSlug(start);
-          const newPath = `/${spaceSlug}/${weekSlug}`;
+          let newPath = '';
+          if (section === 'tasks') {
+            newPath = `/tasks/${spaceSlug}`;
+          } else {
+            const start = parsedWeekStart || new Date('2026-07-20T00:00:00');
+            const weekSlug = getWeekUrlSlug(start);
+            newPath = `/allocator/${spaceSlug}/${weekSlug}`;
+          }
           window.history.replaceState(null, '', newPath);
         }
         setLoading(false);
@@ -367,18 +420,24 @@ export const App: React.FC = () => {
     if (!activeSpace) return;
 
     const spaceSlug = `${activeSpace.id}-${transliterate(activeSpace.name)}`;
-    const weekSlug = getWeekUrlSlug(weekStart);
-    const newPath = `/${spaceSlug}/${weekSlug}`;
+    let newPath = '';
+    if (activeSection === 'tasks') {
+      newPath = `/tasks/${spaceSlug}`;
+    } else {
+      const weekSlug = getWeekUrlSlug(weekStart);
+      newPath = `/allocator/${spaceSlug}/${weekSlug}`;
+    }
 
     if (window.location.pathname !== newPath) {
       window.history.pushState(null, '', newPath);
     }
-  }, [activeSpaceId, weekStart, spaces]);
+  }, [activeSection, activeSpaceId, weekStart, spaces]);
 
   // Sync history state navigation (popstate) back to React states
   useEffect(() => {
     const handlePopState = () => {
-      const { parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+      const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+      setActiveSection(section);
       if (parsedSpaceId && spaces.some((s) => s.id === parsedSpaceId)) {
         setActiveSpaceId(parsedSpaceId);
       }
@@ -806,11 +865,49 @@ export const App: React.FC = () => {
     }).catch((err) => console.error('Error updating designer capacity in SQLite:', err));
   };
 
-  // --- Add Project Handler (SQLite Synced) ---
-  const handleAddProject = (name: string, color: string, memberIds: string[]) => {
+  // --- Add Project Handler (SQLite Synced with unarchive/existing support) ---
+  const handleAddProject = (name: string, color: string, memberIds: string[], existingProjectId?: string) => {
     if (!isAdmin) return;
+
+    if (existingProjectId) {
+      // Это существующий проект (например, заархивированный или созданный в трекере)
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === existingProjectId
+            ? { ...p, isArchived: false, color: color || p.color, memberIds: memberIds.length > 0 ? memberIds : p.memberIds }
+            : p
+        )
+      );
+
+      fetch(`/api/projects/${existingProjectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: false, color, memberIds }),
+      }).catch((err) => console.error('Error unarchiving project in SQLite:', err));
+      
+      return;
+    }
+
+    // Проверяем, не существует ли уже проект с таким именем в текущем пространстве
+    const existing = projects.find(
+      (p) => p.name.toLowerCase() === name.toLowerCase() && p.spaceId === activeSpaceId
+    );
+    if (existing) {
+      // Просто разархивируем его
+      setProjects((prev) =>
+        prev.map((p) => (p.id === existing.id ? { ...p, isArchived: false, color: color || p.color, memberIds } : p))
+      );
+      fetch(`/api/projects/${existing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isArchived: false, color, memberIds }),
+      }).catch((err) => console.error('Error unarchiving project in SQLite:', err));
+      return;
+    }
+
+    // Создаем полностью новый проект
     const newId = `p-${Date.now()}`;
-    const newProj: Project = { id: newId, name, color, memberIds, spaceId: activeSpaceId };
+    const newProj: Project = { id: newId, name, color, memberIds, spaceId: activeSpaceId, isArchived: false };
     setProjects((prev) => [...prev, newProj]);
 
     fetch('/api/projects', {
@@ -818,6 +915,120 @@ export const App: React.FC = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newProj),
     }).catch((err) => console.error('Error adding project in SQLite:', err));
+  };
+
+  // --- Tasks Handlers ---
+  const handleAddColumn = (name: string, isDone: boolean) => {
+    if (!isAdmin) return;
+    const colId = `col-${Date.now()}`;
+    const sortOrder = columns.filter(c => c.spaceId === activeSpaceId).length;
+    const newCol = { id: colId, name, spaceId: activeSpaceId, sortOrder, isDone };
+    setColumns((prev) => [...prev, newCol]);
+
+    fetch('/api/task-columns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCol),
+    }).catch((err) => console.error('Error adding task column:', err));
+  };
+
+  const handleUpdateColumn = (colId: string, updated: { name?: string; isDone?: boolean; sortOrder?: number }) => {
+    if (!isAdmin) return;
+    setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, ...updated } : c)));
+
+    fetch(`/api/task-columns/${colId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch((err) => console.error('Error updating task column:', err));
+  };
+
+  const handleDeleteColumn = (colId: string) => {
+    if (!isAdmin) return;
+    setColumns((prev) => prev.filter((c) => c.id !== colId));
+    setTasks((prev) => prev.filter((t) => t.columnId !== colId));
+
+    fetch(`/api/task-columns/${colId}`, {
+      method: 'DELETE',
+    }).catch((err) => console.error('Error deleting task column:', err));
+  };
+
+  const handleAddCard = (cardData: { title: string; description: string; projectId: string; designerId: string | null; columnId: string }) => {
+    const cardId = `task-${Date.now()}`;
+    const sortOrder = tasks.filter(t => t.columnId === cardData.columnId).length;
+    const newCard = {
+      id: cardId,
+      ...cardData,
+      sortOrder,
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((prev) => [...prev, newCard]);
+
+    fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCard),
+    }).catch((err) => console.error('Error adding task:', err));
+  };
+
+  const handleUpdateCard = (cardId: string, updated: { title?: string; description?: string; projectId?: string; designerId?: string | null; columnId?: string; sortOrder?: number }) => {
+    setTasks((prev) => prev.map((t) => (t.id === cardId ? { ...t, ...updated } : t)));
+
+    fetch(`/api/tasks/${cardId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch((err) => console.error('Error updating task:', err));
+  };
+
+  const handleDeleteCard = (cardId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== cardId));
+    setAttachments((prev) => prev.filter((a) => a.taskId !== cardId));
+    setLinks((prev) => prev.filter((l) => l.taskId !== cardId));
+
+    fetch(`/api/tasks/${cardId}`, {
+      method: 'DELETE',
+    }).catch((err) => console.error('Error deleting task:', err));
+  };
+
+  const handleAddAttachment = (taskId: string, fileName: string, fileUrl: string) => {
+    fetch(`/api/tasks/${taskId}/attachments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, fileUrl }),
+    })
+      .then((res) => res.json())
+      .then((newAttach) => {
+        setAttachments((prev) => [...prev, newAttach]);
+      })
+      .catch((err) => console.error('Error adding attachment:', err));
+  };
+
+  const handleDeleteAttachment = (attachId: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== attachId));
+    fetch(`/api/attachments/${attachId}`, {
+      method: 'DELETE',
+    }).catch((err) => console.error('Error deleting attachment:', err));
+  };
+
+  const handleAddLink = (taskId: string, url: string, title: string) => {
+    fetch(`/api/tasks/${taskId}/links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, title }),
+    })
+      .then((res) => res.json())
+      .then((newLink) => {
+        setLinks((prev) => [...prev, newLink]);
+      })
+      .catch((err) => console.error('Error adding link:', err));
+  };
+
+  const handleDeleteLink = (linkId: string) => {
+    setLinks((prev) => prev.filter((l) => l.id !== linkId));
+    fetch(`/api/links/${linkId}`, {
+      method: 'DELETE',
+    }).catch((err) => console.error('Error deleting link:', err));
   };
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
@@ -829,8 +1040,107 @@ export const App: React.FC = () => {
     <MantineProvider theme={theme}>
       <div className="app-container">
         <Stack gap="lg">
-          {/* Compact Sticky Header (Fixed overlay shown only when scrolled down) */}
-          {isSticky && (
+          {/* Global Header Bar */}
+          <Paper
+            withBorder
+            p="md"
+            radius="lg"
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#ffffff',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          >
+            <Group gap="md">
+              <Group gap="xs">
+                <Avatar size="sm" color="indigo" radius="md">
+                  <IconNotebook size={16} />
+                </Avatar>
+                <div>
+                  <Text fw={800} size="sm" style={{ lineHeight: 1.1, letterSpacing: '-0.3px', fontFamily: 'var(--font-family)' }}>Allocater</Text>
+                  <Text size="8px" c="dimmed" fw={600} style={{ fontFamily: 'var(--font-family)' }}>TIME & TASK TRACKER</Text>
+                </div>
+              </Group>
+
+              <Divider orientation="vertical" h={20} mx="xs" />
+
+              <SegmentedControl
+                value={activeSection}
+                onChange={(val) => setActiveSection(val as 'allocator' | 'tasks')}
+                data={[
+                  { label: 'Аллокатор', value: 'allocator' },
+                  { label: 'Задачи', value: 'tasks' }
+                ]}
+                color="indigo"
+                radius="md"
+                size="xs"
+              />
+            </Group>
+
+            <Group gap="sm">
+              <Select
+                value={activeSpaceId}
+                onChange={(val) => val && setActiveSpaceId(val)}
+                data={spaces.map(s => ({ value: s.id, label: s.name }))}
+                radius="md"
+                size="xs"
+                style={{ width: '160px' }}
+                leftSection={<IconFolder size={14} color="var(--primary-color)" />}
+              />
+
+              <Button
+                leftSection={<IconFolder size={14} />}
+                color="indigo"
+                variant="subtle"
+                radius="md"
+                size="xs"
+                onClick={() => setManageSpacesOpened(true)}
+              >
+                Простір
+              </Button>
+
+              <Button
+                leftSection={<IconUsers size={14} />}
+                color="indigo"
+                variant="subtle"
+                radius="md"
+                size="xs"
+                onClick={() => setDrawerOpened(true)}
+              >
+                Команда
+              </Button>
+
+              {isAdmin ? (
+                <Button
+                  leftSection={<IconLogout size={14} />}
+                  color="red"
+                  variant="light"
+                  radius="md"
+                  size="xs"
+                  onClick={handleLogout}
+                >
+                  Вийти
+                </Button>
+              ) : (
+                <Button
+                  leftSection={<IconLogin size={14} />}
+                  color="indigo"
+                  variant="filled"
+                  radius="md"
+                  size="xs"
+                  onClick={() => setLoginOpened(true)}
+                >
+                  Вхід для Адміна
+                </Button>
+              )}
+            </Group>
+          </Paper>
+
+          {/* Compact Sticky Header (Fixed overlay shown only when scrolled down) - Only for Allocator section */}
+          {isSticky && activeSection === 'allocator' && (
             <div 
               className="glass-panel sticky-header"
               style={{
@@ -870,52 +1180,82 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Normal Dashboard Header (Always static in the document flow) */}
-          <div className="glass-panel">
-            <DesignerHeader
-              users={spaceUsers}
-              projects={spaceProjects}
-              allocations={spaceAllocations}
-              days={weekDays}
-              designerCapacities={designerCapacities}
-              onCapacityChange={handleCapacityChange}
-              currentMonthYear={getMonthYearLabel(weekDays)}
-              onPrevWeek={handlePrevWeek}
-              onNextWeek={handleNextWeek}
-              onOpenManageUsers={() => setDrawerOpened(true)}
-              onOpenManageSpaces={() => setManageSpacesOpened(true)}
+          {/* Render based on active section */}
+          {activeSection === 'allocator' ? (
+            <>
+              {/* Normal Dashboard Header (Always static in the document flow) */}
+              <div className="glass-panel">
+                <DesignerHeader
+                  users={spaceUsers}
+                  projects={spaceProjects}
+                  allocations={spaceAllocations}
+                  days={weekDays}
+                  designerCapacities={designerCapacities}
+                  onCapacityChange={handleCapacityChange}
+                  currentMonthYear={getMonthYearLabel(weekDays)}
+                  onPrevWeek={handlePrevWeek}
+                  onNextWeek={handleNextWeek}
+                  onOpenManageUsers={() => setDrawerOpened(true)}
+                  onOpenManageSpaces={() => setManageSpacesOpened(true)}
+                  isAdmin={isAdmin}
+                  onLogin={handleLogin}
+                  onLogout={handleLogout}
+                  isSticky={false}
+                  loading={loading}
+                />
+              </div>
+
+              {/* Interactive Planner Grid */}
+              <CalendarGrid
+                users={spaceUsers}
+                projects={spaceProjects}
+                allocations={spaceAllocations}
+                days={weekDays}
+                designerCapacities={designerCapacities}
+                onUpdateProjectName={handleUpdateProjectName}
+                onDeleteProject={handleDeleteProject}
+                onAddProjectMember={handleAddProjectMember}
+                onRemoveProjectMember={handleRemoveProjectMember}
+                onReplaceProjectMember={handleReplaceProjectMember}
+                onAddAllocation={handleAddAllocation}
+                onUpdateAllocation={handleUpdateAllocation}
+                onDeleteAllocation={handleDeleteAllocation}
+                onUpdateProjectsList={handleUpdateProjectsList}
+                onSaveProjectsOrder={handleSaveProjectsOrder}
+                isAdmin={isAdmin}
+                loading={loading}
+                columns={columns}
+                tasks={tasks}
+              />
+
+              {/* Add Project Bar - Hidden if not Admin */}
+              {isAdmin && (
+                <AddProjectRow users={spaceUsers} projects={spaceProjects} onAddProject={handleAddProject} />
+              )}
+            </>
+          ) : (
+            <TaskTracker
               isAdmin={isAdmin}
-              onLogin={handleLogin}
-              onLogout={handleLogout}
-              isSticky={false}
-              loading={loading}
+              activeSpaceId={activeSpaceId}
+              users={users}
+              projects={projects}
+              allocations={allocations}
+              columns={columns}
+              tasks={tasks}
+              attachments={attachments}
+              links={links}
+              onAddColumn={handleAddColumn}
+              onUpdateColumn={handleUpdateColumn}
+              onDeleteColumn={handleDeleteColumn}
+              onAddCard={handleAddCard}
+              onUpdateCard={handleUpdateCard}
+              onDeleteCard={handleDeleteCard}
+              onAddAttachment={handleAddAttachment}
+              onDeleteAttachment={handleDeleteAttachment}
+              onAddLink={handleAddLink}
+              onDeleteLink={handleDeleteLink}
+              onAddProject={handleAddProject}
             />
-          </div>
-
-          {/* Interactive Planner Grid */}
-          <CalendarGrid
-            users={spaceUsers}
-            projects={spaceProjects}
-            allocations={spaceAllocations}
-            days={weekDays}
-            designerCapacities={designerCapacities}
-            onUpdateProjectName={handleUpdateProjectName}
-            onDeleteProject={handleDeleteProject}
-            onAddProjectMember={handleAddProjectMember}
-            onRemoveProjectMember={handleRemoveProjectMember}
-            onReplaceProjectMember={handleReplaceProjectMember}
-            onAddAllocation={handleAddAllocation}
-            onUpdateAllocation={handleUpdateAllocation}
-            onDeleteAllocation={handleDeleteAllocation}
-            onUpdateProjectsList={handleUpdateProjectsList}
-            onSaveProjectsOrder={handleSaveProjectsOrder}
-            isAdmin={isAdmin}
-            loading={loading}
-          />
-
-          {/* Add Project Bar - Hidden if not Admin */}
-          {isAdmin && (
-            <AddProjectRow users={spaceUsers} onAddProject={handleAddProject} />
           )}
         </Stack>
 
@@ -1054,6 +1394,64 @@ export const App: React.FC = () => {
               </Group>
             </Stack>
           )}
+        </Modal>
+
+        {/* Global Admin Login Modal */}
+        <Modal
+          opened={loginOpened}
+          onClose={() => {
+            setLoginOpened(false);
+            setLoginError('');
+            setEmail('');
+            setPassword('');
+          }}
+          title={
+            <Group gap="xs">
+              <IconShield size={20} color="var(--primary-color)" />
+              <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
+                Авторизація адміністратора
+              </Text>
+            </Group>
+          }
+          centered
+          radius="md"
+        >
+          <form onSubmit={handleLoginSubmit}>
+            <Stack gap="md">
+              <TextInput
+                label="Email"
+                placeholder="Введіть email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.currentTarget.value)}
+                required
+              />
+              <PasswordInput
+                label="Пароль"
+                placeholder="Введіть пароль"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                required
+              />
+
+              {loginError && (
+                <Text size="xs" c="red" fw={600}>
+                  {loginError}
+                </Text>
+              )}
+
+              <Button
+                type="submit"
+                color="indigo"
+                fullWidth
+                loading={isSubmitting}
+                leftSection={<IconLogin size={16} />}
+                mt="xs"
+              >
+                Увійти
+              </Button>
+            </Stack>
+          </form>
         </Modal>
       </div>
     </MantineProvider>

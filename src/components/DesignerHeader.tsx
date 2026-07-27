@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Group, Text, Button, ActionIcon, Progress, HoverCard, Table, Modal, TextInput, PasswordInput, Stack, Skeleton } from '@mantine/core';
-import { IconChevronLeft, IconChevronRight, IconUsers, IconLogin, IconLogout, IconShield, IconFolder } from '@tabler/icons-react';
+import React from 'react';
+import { Group, Text, ActionIcon, Progress, HoverCard, Table, Stack, Skeleton } from '@mantine/core';
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import type { User, Allocation, Project } from '../types';
 
 interface DesignerHeaderProps {
@@ -13,11 +13,11 @@ interface DesignerHeaderProps {
   currentMonthYear: string;
   onPrevWeek: () => void;
   onNextWeek: () => void;
-  onOpenManageUsers: () => void;
-  onOpenManageSpaces: () => void;
+  onOpenManageUsers?: () => void;
+  onOpenManageSpaces?: () => void;
   isAdmin: boolean;
-  onLogin: (email: string, pass: string) => Promise<boolean>;
-  onLogout: () => void;
+  onLogin?: (email: string, pass: string) => Promise<boolean>;
+  onLogout?: () => void;
   isSticky?: boolean;
   loading?: boolean;
 }
@@ -32,22 +32,12 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
   currentMonthYear,
   onPrevWeek,
   onNextWeek,
-  onOpenManageUsers,
-  onOpenManageSpaces,
   isAdmin,
-  onLogin,
-  onLogout,
   isSticky = false,
   loading = false,
 }) => {
   const designers = users.filter((u) => u.isDesigner);
 
-  // Authentication form states
-  const [loginOpened, setLoginOpened] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Helper to format Date to YYYY-MM-DD local string
   const formatDateString = (date: Date) => {
@@ -75,22 +65,6 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
     return names[dayIndex];
   };
 
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setIsSubmitting(true);
-
-    const success = await onLogin(email, password);
-    setIsSubmitting(false);
-
-    if (success) {
-      setLoginOpened(false);
-      setEmail('');
-      setPassword('');
-    } else {
-      setLoginError('Невірний email або пароль');
-    }
-  };
 
   if (isSticky) {
     return (
@@ -274,64 +248,6 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
           })
         )}
       </Group>
-
-        {/* Modal for login inside compact header as well */}
-        <Modal
-          opened={loginOpened}
-          onClose={() => {
-            setLoginOpened(false);
-            setLoginError('');
-            setEmail('');
-            setPassword('');
-          }}
-          title={
-            <Group gap="xs">
-              <IconShield size={20} color="var(--primary-color)" />
-              <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
-                Авторизація адміністратора
-              </Text>
-            </Group>
-          }
-          centered
-          radius="md"
-        >
-          <form onSubmit={handleLoginSubmit}>
-            <Stack gap="md">
-              <TextInput
-                label="Email"
-                placeholder="Введіть email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.currentTarget.value)}
-                required
-              />
-              <PasswordInput
-                label="Пароль"
-                placeholder="Введіть пароль"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-                required
-              />
-
-              {loginError && (
-                <Text size="xs" c="red" fw={600}>
-                  {loginError}
-                </Text>
-              )}
-
-              <Button
-                type="submit"
-                color="indigo"
-                fullWidth
-                loading={isSubmitting}
-                leftSection={<IconLogin size={16} />}
-                mt="xs"
-              >
-                Увійти
-              </Button>
-            </Stack>
-          </form>
-        </Modal>
       </div>
     );
   }
@@ -353,50 +269,6 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
               <IconChevronRight size={18} />
             </ActionIcon>
           </Group>
-        </Group>
-
-        <Group gap="sm">
-          <Button
-            leftSection={<IconFolder size={16} />}
-            color="indigo"
-            variant="outline"
-            radius="md"
-            onClick={onOpenManageSpaces}
-          >
-            Простір
-          </Button>
-
-          <Button
-            leftSection={<IconUsers size={16} />}
-            color="indigo"
-            variant="outline"
-            radius="md"
-            onClick={onOpenManageUsers}
-          >
-            Команда
-          </Button>
-
-          {isAdmin ? (
-            <Button
-              leftSection={<IconLogout size={16} />}
-              color="red"
-              variant="light"
-              radius="md"
-              onClick={onLogout}
-            >
-              Вийти
-            </Button>
-          ) : (
-            <Button
-              leftSection={<IconLogin size={16} />}
-              color="indigo"
-              variant="filled"
-              radius="md"
-              onClick={() => setLoginOpened(true)}
-            >
-              Вхід для Адміна
-            </Button>
-          )}
         </Group>
       </Group>
 
@@ -655,64 +527,6 @@ export const DesignerHeader: React.FC<DesignerHeaderProps> = ({
         })
       )}
     </div>
-
-      {/* Admin Login Modal */}
-      <Modal
-        opened={loginOpened}
-        onClose={() => {
-          setLoginOpened(false);
-          setLoginError('');
-          setEmail('');
-          setPassword('');
-        }}
-        title={
-          <Group gap="xs">
-            <IconShield size={20} color="var(--primary-color)" />
-            <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
-              Авторизація адміністратора
-            </Text>
-          </Group>
-        }
-        centered
-        radius="md"
-      >
-        <form onSubmit={handleLoginSubmit}>
-          <Stack gap="md">
-            <TextInput
-              label="Email"
-              placeholder="Введіть email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
-              required
-            />
-            <PasswordInput
-              label="Пароль"
-              placeholder="Введіть пароль"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-
-            {loginError && (
-              <Text size="xs" c="red" fw={600}>
-                {loginError}
-              </Text>
-            )}
-
-            <Button
-              type="submit"
-              color="indigo"
-              fullWidth
-              loading={isSubmitting}
-              leftSection={<IconLogin size={16} />}
-              mt="xs"
-            >
-              Увійти
-            </Button>
-          </Stack>
-        </form>
-      </Modal>
     </div>
   );
 };

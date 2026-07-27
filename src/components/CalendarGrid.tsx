@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton } from '@mantine/core';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress } from '@mantine/core';
 import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
@@ -82,6 +82,8 @@ interface CalendarGridProps {
   onSaveProjectsOrder: (orderedIds: string[]) => void;
   isAdmin: boolean;
   loading?: boolean;
+  columns?: any[];
+  tasks?: any[];
 }
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -102,6 +104,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onSaveProjectsOrder,
   isAdmin,
   loading = false,
+  columns = [],
+  tasks = [],
 }) => {
   // Drag selection state
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
@@ -515,10 +519,18 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ) : (
                   visibleProjects.map((project, idx) => {
                     const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
-                  const projectDesigners = projectMembers.filter((u) => u.isDesigner);
-                  const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
-                  const startOfWeekStr = formatDateString(days[0]);
-                const endOfWeekStr = formatDateString(days[days.length - 1]);
+                    const projectDesigners = projectMembers.filter((u) => u.isDesigner);
+                    const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+                    const startOfWeekStr = formatDateString(days[0]);
+                    const endOfWeekStr = formatDateString(days[days.length - 1]);
+
+                    // Расчет прогресса задач проекта
+                    const projectTasks = tasks.filter((t) => t.projectId === project.id);
+                    const doneColumnIds = columns.filter((col) => col.isDone === 1 || col.isDone === true).map((col) => col.id);
+                    const doneTasks = projectTasks.filter((t) => doneColumnIds.includes(t.columnId));
+                    const totalTasksCount = projectTasks.length;
+                    const doneTasksCount = doneTasks.length;
+                    const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
 
                 // Compute lanes for this project
                 const projectAllocations = allocations.filter((a) => {
@@ -735,6 +747,80 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                               </Menu>
                             )}
                           </div>
+
+                          {/* Прогрес-бар виконання проєкту */}
+                          {totalTasksCount === 0 ? (
+                            <div style={{ marginTop: '12px', padding: '4px 8px', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)' }}>
+                              <Text size="10px" c="dimmed" style={{ fontStyle: 'italic', fontWeight: 600, fontFamily: 'var(--font-family)' }}>Задач немає</Text>
+                            </div>
+                          ) : (
+                            <div style={{ position: 'relative', marginTop: '16px', paddingTop: '16px', paddingBottom: '2px' }}>
+                              {/* Floating bubble showing progress */}
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '16px',
+                                  left: `calc(${progressPercent}% - 14px)`,
+                                  backgroundColor: 'var(--primary-color)',
+                                  color: '#ffffff',
+                                  padding: '1px 5px',
+                                  borderRadius: '6px',
+                                  fontSize: '8px',
+                                  fontWeight: 800,
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: '0 2px 4px rgba(99, 102, 241, 0.25)',
+                                  transition: 'left 0.3s ease',
+                                  zIndex: 5
+                                } as React.CSSProperties}
+                              >
+                                {progressPercent}%
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: '-2px',
+                                    left: 'calc(50% - 2px)',
+                                    width: 0,
+                                    height: 0,
+                                    borderStyle: 'solid',
+                                    borderWidth: '2px 2px 0 2px',
+                                    borderColor: 'var(--primary-color) transparent transparent transparent'
+                                  }}
+                                />
+                              </div>
+
+                              <Progress
+                                value={progressPercent}
+                                color="indigo"
+                                size="xs"
+                                radius="xl"
+                                style={{
+                                  transition: 'all 0.3s ease',
+                                  backgroundColor: '#e2e8f0'
+                                }}
+                              />
+
+                              {/* Target point indicator */}
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '18px',
+                                  left: `calc(${progressPercent}% - 3px)`,
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#ffffff',
+                                  border: '2px solid var(--primary-color)',
+                                  boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.2)',
+                                  transition: 'left 0.3s ease',
+                                  zIndex: 4
+                                }}
+                              />
+
+                              <Text size="9px" c="dimmed" mt="2px" style={{ textAlign: 'right', fontWeight: 600 }}>
+                                {doneTasksCount}/{totalTasksCount} виконано
+                              </Text>
+                            </div>
+                          )}
                         </div>
 
                         {/* Right Cell: Days Grid & Allocations overlay */}

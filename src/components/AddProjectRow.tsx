@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Group, TextInput, Button, Text, Stack, ActionIcon } from '@mantine/core';
-import { IconPlus, IconX } from '@tabler/icons-react';
-import type { User } from '../types';
+import { Group, TextInput, Button, Text, Stack, ActionIcon, Select } from '@mantine/core';
+import { IconPlus, IconX, IconFolder } from '@tabler/icons-react';
+import type { User, Project } from '../types';
 
 interface AddProjectRowProps {
   users: User[];
-  onAddProject: (name: string, color: string, memberIds: string[]) => void;
+  projects: Project[];
+  onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
 }
 
-export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProject }) => {
+export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, onAddProject }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('new');
   const [name, setName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
@@ -19,11 +21,33 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
     );
   };
 
+  const handleProjectSelectChange = (val: string | null) => {
+    const value = val || 'new';
+    setSelectedProjectId(value);
+    if (value === 'new') {
+      setName('');
+      setSelectedMembers([]);
+    } else {
+      const existingProject = projects.find((p) => p.id === value);
+      if (existingProject) {
+        setName(existingProject.name);
+        setSelectedMembers(existingProject.memberIds || []);
+      }
+    }
+  };
+
   const handleSave = () => {
-    if (!name.trim()) return;
-    onAddProject(name.trim(), 'indigo', selectedMembers);
+    if (selectedProjectId === 'new') {
+      if (!name.trim()) return;
+      onAddProject(name.trim(), 'indigo', selectedMembers);
+    } else {
+      const existingProject = projects.find((p) => p.id === selectedProjectId);
+      if (!existingProject) return;
+      onAddProject(existingProject.name, existingProject.color || 'indigo', selectedMembers, selectedProjectId);
+    }
     setName('');
     setSelectedMembers([]);
+    setSelectedProjectId('new');
     setIsExpanded(false);
   };
 
@@ -58,6 +82,15 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
     );
   }
 
+  // Build the list of projects for Select dropdown
+  const selectData = [
+    { value: 'new', label: '+ Створити новий проєкт' },
+    ...projects.map((p) => ({
+      value: p.id,
+      label: `${p.name}${p.isArchived ? ' (в архіві)' : ''}`,
+    })),
+  ];
+
   return (
     <div className="add-project-form-container">
       <Group justify="space-between" mb="md">
@@ -68,14 +101,28 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
       </Group>
 
       <Stack gap="md">
-        <TextInput
-          ref={inputRef}
-          label="Назва проєкту"
-          placeholder="Введіть назву (наприклад: Master ЛК)"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          required
+        <Select
+          label="Оберіть проєкт"
+          placeholder="Оберіть зі списку або створіть новий"
+          value={selectedProjectId}
+          onChange={handleProjectSelectChange}
+          data={selectData}
+          searchable
+          clearable={false}
+          radius="md"
+          leftSection={<IconFolder size={16} color="var(--primary-color)" />}
         />
+
+        {selectedProjectId === 'new' && (
+          <TextInput
+            ref={inputRef}
+            label="Назва проєкту"
+            placeholder="Введіть назву (наприклад: Master ЛК)"
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            required
+          />
+        )}
 
         <div>
           <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Команда проєкту</Text>
@@ -129,8 +176,12 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, onAddProjec
           <Button variant="subtle" color="gray" onClick={() => setIsExpanded(false)}>
             Скасувати
           </Button>
-          <Button color="indigo" onClick={handleSave} disabled={!name.trim()}>
-            Створити проєкт
+          <Button 
+            color="indigo" 
+            onClick={handleSave} 
+            disabled={selectedProjectId === 'new' ? !name.trim() : false}
+          >
+            {selectedProjectId === 'new' ? 'Створити проєкт' : 'Додати/Розархівувати проєкт'}
           </Button>
         </Group>
       </Stack>

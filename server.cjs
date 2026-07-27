@@ -166,6 +166,39 @@ async function initializeDb() {
       memberIds TEXT
     )`);
 
+    await executeQuery(`CREATE TABLE IF NOT EXISTS task_columns (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      spaceId TEXT,
+      sortOrder INTEGER,
+      isDone INTEGER DEFAULT 0
+    )`);
+
+    await executeQuery(`CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      description TEXT,
+      projectId TEXT,
+      designerId TEXT,
+      columnId TEXT,
+      sortOrder INTEGER,
+      createdAt TEXT
+    )`);
+
+    await executeQuery(`CREATE TABLE IF NOT EXISTS task_attachments (
+      id TEXT PRIMARY KEY,
+      taskId TEXT,
+      fileName TEXT,
+      fileUrl TEXT
+    )`);
+
+    await executeQuery(`CREATE TABLE IF NOT EXISTS task_links (
+      id TEXT PRIMARY KEY,
+      taskId TEXT,
+      url TEXT,
+      title TEXT
+    )`);
+
     // Check and seed users if empty
     const userRows = await executeQuery('SELECT COUNT(*) as count FROM users');
     const userCount = userRows && userRows[0] ? parseInt(userRows[0].count || userRows[0].COUNT || Object.values(userRows[0])[0] || 0, 10) : 0;
@@ -234,6 +267,24 @@ async function initializeDb() {
       
       // Associate all existing projects with the default space
       await executeQuery("UPDATE projects SET spaceId = '1' WHERE spaceId IS NULL OR spaceId = ''");
+    }
+
+    // Сидинг колонок задач по умолчанию для пространства '1'
+    const columnRows = await executeQuery('SELECT COUNT(*) as count FROM task_columns');
+    const columnCount = columnRows && columnRows[0] ? parseInt(columnRows[0].count || columnRows[0].COUNT || Object.values(columnRows[0])[0] || 0, 10) : 0;
+    if (columnCount === 0) {
+      console.log('Seeding initial task columns...');
+      const defaultCols = [
+        { id: 'col-todo', name: 'Нужно сделать', spaceId: '1', sortOrder: 0, isDone: 0 },
+        { id: 'col-progress', name: 'В работе', spaceId: '1', sortOrder: 1, isDone: 0 },
+        { id: 'col-done', name: 'Выполнено', spaceId: '1', sortOrder: 2, isDone: 1 },
+      ];
+      for (const col of defaultCols) {
+        await executeQuery(
+          'INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone) VALUES (?, ?, ?, ?, ?)',
+          [col.id, col.name, col.spaceId, col.sortOrder, col.isDone]
+        );
+      }
     }
   } catch (err) {
     console.error('Error initializing database:', err);
@@ -613,6 +664,216 @@ app.delete('/api/allocations/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await executeQuery('DELETE FROM allocations WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Tasks & Columns API (Kanban Tracker) ---
+
+app.get('/api/tasks/data', async (req, res) => {
+  try {
+    const columns = await executeQuery('SELECT * FROM task_columns ORDER BY sortOrder ASC');
+    const tasks = await executeQuery('SELECT * FROM tasks ORDER BY sortOrder ASC');
+    const attachments = await executeQuery('SELECT * FROM task_attachments');
+    const links = await executeQuery('SELECT * FROM task_links');
+    
+    res.json({
+      columns: columns.map(c => ({
+        id: c.id,
+        name: c.name,
+        spaceId: c.spaceid || c.spaceId,
+        sortOrder: c.sortorder || c.sortOrder,
+        isDone: c.isdone !== undefined ? !!c.isdone : !!c.isDone
+      })),
+      tasks: tasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        projectId: t.projectid || t.projectId,
+        designerId: t.designerid || t.designerId,
+        columnId: t.columnid || t.columnId,
+        sortOrder: t.sortorder || t.sortOrder,
+        createdAt: t.createdat || t.createdAt
+      })),
+      attachments: attachments.map(a => ({
+        id: a.id,
+        taskId: a.taskid || a.taskId,
+        fileName: a.filename || a.fileName,
+        fileUrl: a.fileurl || a.fileUrl
+      })),
+      links: links.map(l => ({
+        id: l.id,
+        taskId: l.taskid || l.taskId,
+        url: l.url,
+        title: l.title
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/task-columns', async (req, res) => {
+  const { id, name, spaceId, sortOrder, isDone } = req.body;
+  try {
+    await executeQuery(
+      'INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone) VALUES (?, ?, ?, ?, ?)',
+      [id, name, spaceId, sortOrder, isDone ? 1 : 0]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/task-columns/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, sortOrder, isDone } = req.body;
+  try {
+    let query = 'UPDATE task_columns SET ';
+    const params = [];
+    if (name !== undefined) {
+      query += 'name = ?, ';
+      params.push(name);
+    }
+    if (sortOrder !== undefined) {
+      query += 'sortOrder = ?, ';
+      params.push(sortOrder);
+    }
+    if (isDone !== undefined) {
+      query += 'isDone = ?, ';
+      params.push(isDone ? 1 : 0);
+    }
+    query = query.slice(0, -2) + ' WHERE id = ?';
+    params.push(id);
+    await executeQuery(query, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/task-columns/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await executeQuery('DELETE FROM task_columns WHERE id = ?', [id]);
+    await executeQuery('DELETE FROM tasks WHERE columnId = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tasks', async (req, res) => {
+  const { id, title, description, projectId, designerId, columnId, sortOrder, createdAt } = req.body;
+  try {
+    await executeQuery(
+      'INSERT INTO tasks (id, title, description, projectId, designerId, columnId, sortOrder, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, description || '', projectId, designerId || null, columnId, sortOrder, createdAt || new Date().toISOString()]
+    );
+    res.status(201).json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, description, projectId, designerId, columnId, sortOrder } = req.body;
+  try {
+    let query = 'UPDATE tasks SET ';
+    const params = [];
+    if (title !== undefined) {
+      query += 'title = ?, ';
+      params.push(title);
+    }
+    if (description !== undefined) {
+      query += 'description = ?, ';
+      params.push(description);
+    }
+    if (projectId !== undefined) {
+      query += 'projectId = ?, ';
+      params.push(projectId);
+    }
+    if (designerId !== undefined) {
+      query += 'designerId = ?, ';
+      params.push(designerId);
+    }
+    if (columnId !== undefined) {
+      query += 'columnId = ?, ';
+      params.push(columnId);
+    }
+    if (sortOrder !== undefined) {
+      query += 'sortOrder = ?, ';
+      params.push(sortOrder);
+    }
+    query = query.slice(0, -2) + ' WHERE id = ?';
+    params.push(id);
+    await executeQuery(query, params);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await executeQuery('DELETE FROM tasks WHERE id = ?', [id]);
+    await executeQuery('DELETE FROM task_attachments WHERE taskId = ?', [id]);
+    await executeQuery('DELETE FROM task_links WHERE taskId = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tasks/:id/attachments', async (req, res) => {
+  const { id } = req.params;
+  const { fileName, fileUrl } = req.body;
+  const attachmentId = `attach-${Date.now()}`;
+  try {
+    await executeQuery(
+      'INSERT INTO task_attachments (id, taskId, fileName, fileUrl) VALUES (?, ?, ?, ?)',
+      [attachmentId, id, fileName, fileUrl]
+    );
+    res.status(201).json({ id: attachmentId, fileName, fileUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/attachments/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await executeQuery('DELETE FROM task_attachments WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tasks/:id/links', async (req, res) => {
+  const { id } = req.params;
+  const { url, title } = req.body;
+  const linkId = `link-${Date.now()}`;
+  try {
+    await executeQuery(
+      'INSERT INTO task_links (id, taskId, url, title) VALUES (?, ?, ?, ?)',
+      [linkId, id, url, title || url]
+    );
+    res.status(201).json({ id: linkId, url, title });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/links/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await executeQuery('DELETE FROM task_links WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
