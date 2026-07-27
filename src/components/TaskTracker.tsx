@@ -27,7 +27,6 @@ import {
   IconPlus,
   IconTrash,
   IconPencil,
-  IconFolderPlus,
   IconNotebook,
   IconPhoto,
   IconLink,
@@ -45,6 +44,7 @@ interface TaskTrackerProps {
   tasks: any[];
   attachments: any[];
   links: any[];
+  weekDays: Date[];
   onAddColumn: (name: string, isDone: boolean) => void;
   onUpdateColumn: (colId: string, updated: any) => void;
   onDeleteColumn: (colId: string) => void;
@@ -68,6 +68,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   tasks,
   attachments,
   links,
+  weekDays,
   onAddColumn,
   onUpdateColumn,
   onDeleteColumn,
@@ -250,7 +251,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     setEditingTitle(isNew);
     setEditingProjectId(isNew);
     setEditingDesignerId(isNew);
-    setEditingDesc(isNew);
+    setEditingDesc(false);
 
     setTaskModalOpened(true);
   };
@@ -278,12 +279,37 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     });
   };
 
-  // Format total hours allocated to designer for a project this week
+  // Format total hours allocated to designer for a project this week (sprint)
   const getDesignerHoursInfo = (designerId: string | null, projectId: string) => {
     if (!designerId) return '';
-    const hours = allocations
-      .filter((a) => a.designerId === designerId && a.projectId === projectId)
-      .reduce((sum, a) => sum + a.hours, 0);
+    
+    const workingDays = weekDays.slice(0, 5); // Monday to Friday
+    let totalSprintHours = 0;
+
+    workingDays.forEach((day) => {
+      const year = day.getFullYear();
+      const month = String(day.getMonth() + 1).padStart(2, '0');
+      const date = String(day.getDate()).padStart(2, '0');
+      const dayStr = `${year}-${month}-${date}`;
+
+      allocations
+        .filter((a) => a.designerId === designerId && a.projectId === projectId)
+        .forEach((alloc) => {
+          const start = new Date(alloc.startDate);
+          start.setHours(0,0,0,0);
+          const end = new Date(alloc.endDate);
+          end.setHours(0,0,0,0);
+          const current = new Date(dayStr);
+          current.setHours(0,0,0,0);
+          
+          if (current >= start && current <= end) {
+            const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            totalSprintHours += alloc.hours / durationDays;
+          }
+        });
+    });
+
+    const hours = Math.round(totalSprintHours * 10) / 10;
     return hours > 0 ? `(${hours} год заплановано)` : '(0 год)';
   };
 
@@ -707,127 +733,161 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           return (
             <Stack gap="md" style={{ overflow: 'visible' }}>
               <Group grow gap="md">
-                {/* Project Field (View / Edit) */}
-                {editingProjectId ? (
-                  <Select
-                    label="Проєкт"
-                    data={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
-                    value={draftProjectId}
-                    onChange={(val) => {
-                      if (val) {
-                        setDraftProjectId(val);
-                        const proj = projects.find((p) => p.id === val);
-                        let nextDesignerId = draftDesignerId;
-                        if (proj && draftDesignerId && !proj.memberIds.includes(draftDesignerId)) {
-                          nextDesignerId = null;
-                          setDraftDesignerId(null);
+                {/* Project Field (View / Edit inside the same box to prevent layout shift) */}
+                <div 
+                  onClick={() => setEditingProjectId(true)} 
+                  style={{ 
+                    cursor: 'pointer', 
+                    padding: '8px 12px', 
+                    borderRadius: '8px', 
+                    border: '1px solid var(--border-color)', 
+                    backgroundColor: '#ffffff',
+                    height: '62px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    transition: 'border-color 0.2s'
+                  }}
+                  title="Натисніть, щоб змінити проєкт"
+                >
+                  <Text size="xs" fw={700} c="dimmed" mb="2px">ПРОЄКТ</Text>
+                  {editingProjectId ? (
+                    <Select
+                      data={[
+                        { value: 'CREATE_NEW', label: '+ Створити новий проєкт' },
+                        ...activeProjects.map((p) => ({ value: p.id, label: p.name }))
+                      ]}
+                      value={draftProjectId}
+                      onChange={(val) => {
+                        if (val === 'CREATE_NEW') {
+                          setNewProjectModalOpened(true);
+                          setEditingProjectId(false);
+                          return;
                         }
-                        handleAutosave({ projectId: val, designerId: nextDesignerId });
-                        setEditingProjectId(false);
-                      }
-                    }}
-                    onBlur={() => setEditingProjectId(false)}
-                    autoFocus
-                    required
-                  />
-                ) : (
-                  <div 
-                    onClick={() => setEditingProjectId(true)} 
-                    style={{ 
-                      cursor: 'pointer', 
-                      padding: '8px 12px', 
-                      borderRadius: '8px', 
-                      border: '1px solid var(--border-color)', 
-                      backgroundColor: '#ffffff',
-                      transition: 'border-color 0.2s'
-                    }}
-                    title="Натисніть, щоб змінити проєкт"
-                  >
-                    <Text size="xs" fw={700} c="dimmed" mb="4px">ПРОЄКТ</Text>
-                    <Group gap="xs">
+                        if (val) {
+                          setDraftProjectId(val);
+                          const proj = projects.find((p) => p.id === val);
+                          let nextDesignerId = draftDesignerId;
+                          if (proj && draftDesignerId && !proj.memberIds.includes(draftDesignerId)) {
+                            nextDesignerId = null;
+                            setDraftDesignerId(null);
+                          }
+                          handleAutosave({ projectId: val, designerId: nextDesignerId });
+                          setEditingProjectId(false);
+                        }
+                      }}
+                      onBlur={() => setEditingProjectId(false)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                      searchable
+                      placeholder="Пошук проєкту..."
+                      variant="unstyled"
+                      styles={{ 
+                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' },
+                        dropdown: { zIndex: 1000 }
+                      }}
+                    />
+                  ) : (
+                    <Group gap="xs" style={{ height: '24px' }}>
                       <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentProjectColor || 'indigo' }} />
                       <Text size="sm" fw={600} truncate>{currentProjectName}</Text>
                     </Group>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {/* Assignee Field (View / Edit) */}
-                {editingDesignerId ? (
-                  <Select
-                    label="Виконавець (Дизайнер)"
-                    data={[
-                      { value: '', label: 'Не призначено' },
-                      ...users
-                        .filter((u) => {
-                          const proj = projects.find((p) => p.id === draftProjectId);
-                          return proj ? proj.memberIds.includes(u.id) : false;
-                        })
-                        .map((d) => ({
-                          value: d.id,
-                          label: `${d.name} ${getDesignerHoursInfo(d.id, draftProjectId)}`
-                        }))
-                    ]}
-                    value={draftDesignerId || ''}
-                    onChange={(val) => {
-                      const designerId = val || null;
-                      setDraftDesignerId(designerId);
-                      handleAutosave({ designerId });
-                      setEditingDesignerId(false);
-                    }}
-                    onBlur={() => setEditingDesignerId(false)}
-                    autoFocus
-                    placeholder="Виберіть виконавця"
-                  />
-                ) : (
-                  <div 
-                    onClick={() => setEditingDesignerId(true)} 
-                    style={{ 
-                      cursor: 'pointer', 
-                      padding: '8px 12px', 
-                      borderRadius: '8px', 
-                      border: '1px solid var(--border-color)', 
-                      backgroundColor: '#ffffff',
-                      transition: 'border-color 0.2s'
-                    }}
-                    title="Натисніть, щоб змінити виконавця"
-                  >
-                    <Text size="xs" fw={700} c="dimmed" mb="4px">ВИКОНАВЕЦЬ</Text>
-                    {currentDesigner ? (
-                      <Group gap="xs" wrap="nowrap">
-                        {(() => {
-                          const isBase64 = currentDesigner.avatar && (currentDesigner.avatar.startsWith('data:image/') || currentDesigner.avatar.startsWith('http') || currentDesigner.avatar.startsWith('/'));
-                          return (
-                            <Avatar size="xs" src={isBase64 ? currentDesigner.avatar : undefined} color="indigo" radius="xl">
-                              {!isBase64 && currentDesigner.avatar}
+                {/* Assignee Field (View / Edit inside the same box to prevent layout shift) */}
+                <div 
+                  onClick={() => setEditingDesignerId(true)} 
+                  style={{ 
+                    cursor: 'pointer', 
+                    padding: '8px 12px', 
+                    borderRadius: '8px', 
+                    border: '1px solid var(--border-color)', 
+                    backgroundColor: '#ffffff',
+                    height: '62px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    transition: 'border-color 0.2s'
+                  }}
+                  title="Натисніть, щоб змінити виконавця"
+                >
+                  <Text size="xs" fw={700} c="dimmed" mb="2px">ВИКОНАВЕЦЬ</Text>
+                  {editingDesignerId ? (
+                    <Select
+                      data={[
+                        { value: '', label: 'Не призначено' },
+                        ...users
+                          .filter((u) => {
+                            const proj = projects.find((p) => p.id === draftProjectId);
+                            return proj ? proj.memberIds.includes(u.id) : false;
+                          })
+                          .map((d) => ({
+                            value: d.id,
+                            label: `${d.name} ${getDesignerHoursInfo(d.id, draftProjectId)}`
+                          }))
+                      ]}
+                      value={draftDesignerId || ''}
+                      onChange={(val) => {
+                        const designerId = val || null;
+                        setDraftDesignerId(designerId);
+                        handleAutosave({ designerId });
+                        setEditingDesignerId(false);
+                      }}
+                      onBlur={() => setEditingDesignerId(false)}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                      variant="unstyled"
+                      styles={{ 
+                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' },
+                        dropdown: { zIndex: 1000 }
+                      }}
+                      renderOption={({ option }) => {
+                        if (!option.value) {
+                          return <Text size="sm">{option.label}</Text>;
+                        }
+                        const designer = users.find((u) => u.id === option.value);
+                        if (!designer) {
+                          return <Text size="sm">{option.label}</Text>;
+                        }
+                        const isBase64 = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
+                        return (
+                          <Group gap="xs" wrap="nowrap">
+                            <Avatar size="xs" src={isBase64 ? designer.avatar : undefined} color="indigo" radius="xl">
+                              {!isBase64 && designer.avatar}
                             </Avatar>
-                          );
-                        })()}
-                        <Text size="sm" fw={600} truncate>{currentDesigner.name}</Text>
-                        <Text size="10px" c="dimmed" style={{ flexShrink: 0 }}>
-                          ({getDesignerHoursInfo(currentDesigner.id, draftProjectId).split(' ').shift()} год)
-                        </Text>
-                      </Group>
-                    ) : (
-                      <Text size="sm" fw={600} c="dimmed">Не призначено</Text>
-                    )}
-                  </div>
-                )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <Text size="sm" fw={600} truncate>{designer.name}</Text>
+                              <Text size="10px" c="dimmed" truncate>{designer.role} {getDesignerHoursInfo(designer.id, draftProjectId)}</Text>
+                            </div>
+                          </Group>
+                        );
+                      }}
+                    />
+                  ) : (
+                    <div style={{ height: '24px', display: 'flex', alignItems: 'center' }}>
+                      {currentDesigner ? (
+                        <Group gap="xs" wrap="nowrap">
+                          {(() => {
+                            const isBase64 = currentDesigner.avatar && (currentDesigner.avatar.startsWith('data:image/') || currentDesigner.avatar.startsWith('http') || currentDesigner.avatar.startsWith('/'));
+                            return (
+                              <Avatar size="xs" src={isBase64 ? currentDesigner.avatar : undefined} color="indigo" radius="xl">
+                                {!isBase64 && currentDesigner.avatar}
+                              </Avatar>
+                            );
+                          })()}
+                          <Text size="sm" fw={600} truncate>{currentDesigner.name}</Text>
+                          <Text size="10px" c="dimmed" style={{ flexShrink: 0 }}>
+                            ({getDesignerHoursInfo(currentDesigner.id, draftProjectId).split(' ').shift()} год)
+                          </Text>
+                        </Group>
+                      ) : (
+                        <Text size="sm" fw={600} c="dimmed">Не призначено</Text>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Group>
-
-              {/* Inline Project creation helper - Only shown if editing project */}
-              {editingProjectId && (
-                <Group justify="flex-start">
-                  <Button
-                    variant="subtle"
-                    color="indigo"
-                    size="xs"
-                    leftSection={<IconFolderPlus size={14} />}
-                    onClick={() => setNewProjectModalOpened(true)}
-                  >
-                    Створити новий проєкт
-                  </Button>
-                </Group>
-              )}
 
               {/* Description HTML contenteditable visual editor (View / Edit) */}
               <Text fw={700} size="xs" c="dimmed" mt="xs">ОПИС ЗАДАЧІ</Text>

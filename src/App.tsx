@@ -13,6 +13,13 @@ import { IconNotebook, IconFolder, IconUsers, IconLogout, IconLogin, IconShield 
 const theme = createTheme({
   fontFamily: 'var(--font-family)',
   primaryColor: 'indigo',
+  components: {
+    Select: {
+      defaultProps: {
+        checkIconPosition: 'right',
+      },
+    },
+  },
 });
 
 // Ukrainian Transliteration Helper
@@ -1278,6 +1285,7 @@ export const App: React.FC = () => {
               onAddLink={handleAddLink}
               onDeleteLink={handleDeleteLink}
               onAddProject={handleAddProject}
+              weekDays={weekDays}
             />
           )}
         </Stack>
