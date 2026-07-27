@@ -281,6 +281,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const getPlainTextFromDescription = (desc: string): string => {
     if (!desc) return '';
     const trimmed = desc.trim();
+    let text = trimmed;
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         const data = JSON.parse(trimmed);
@@ -300,14 +301,39 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
               });
             }
           });
-          const combined = textParts.join(' ');
-          return combined.replace(/<[^>]*>/g, '');
+          text = textParts.join(' ');
         }
       } catch (e) {
         // Fallback
       }
     }
-    return trimmed.replace(/<[^>]*>/g, '');
+    
+    // Strip HTML tags
+    text = text.replace(/<[^>]*>/g, '');
+    
+    // Decode HTML entities
+    const entities: { [key: string]: string } = {
+      '&nbsp;': ' ',
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&rsquo;': "'",
+      '&lsquo;': "'",
+      '&ldquo;': '"',
+      '&rdquo;': '"',
+      '&ndash;': '-',
+      '&mdash;': '—'
+    };
+    
+    Object.keys(entities).forEach((entity) => {
+      text = text.replaceAll(entity, entities[entity]);
+    });
+    
+    text = text.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
+    
+    return text.trim();
   };
 
   // Render Editor.js JSON data in View Mode (handles standard and nested lists recursively)
@@ -606,6 +632,39 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
     const hours = Math.round(totalSprintHours * 10) / 10;
     return hours > 0 ? `(${hours} год заплановано)` : '(0 год)';
+  };
+
+  // Get numeric hours allocated to designer for a project this week (sprint)
+  const getDesignerHoursValue = (designerId: string | null, projectId: string): number => {
+    if (!designerId) return 0;
+    
+    const workingDays = weekDays.slice(0, 5); // Monday to Friday
+    let totalSprintHours = 0;
+
+    workingDays.forEach((day) => {
+      const year = day.getFullYear();
+      const month = String(day.getMonth() + 1).padStart(2, '0');
+      const date = String(day.getDate()).padStart(2, '0');
+      const dayStr = `${year}-${month}-${date}`;
+
+      allocations
+        .filter((a) => a.designerId === designerId && a.projectId === projectId)
+        .forEach((alloc) => {
+          const start = new Date(alloc.startDate);
+          start.setHours(0,0,0,0);
+          const end = new Date(alloc.endDate);
+          end.setHours(0,0,0,0);
+          const current = new Date(dayStr);
+          current.setHours(0,0,0,0);
+          
+          if (current >= start && current <= end) {
+            const durationDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            totalSprintHours += alloc.hours / durationDays;
+          }
+        });
+    });
+
+    return Math.round(totalSprintHours * 10) / 10;
   };
 
   // Create Project Callback from Tracker Drawer
@@ -1025,6 +1084,40 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           const currentProjectColor = currentProject ? currentProject.color : 'indigo';
           const currentDesigner = users.find((u) => u.id === draftDesignerId);
 
+          // Get project members
+          const projectMembers = users.filter((u) => {
+            return currentProject ? currentProject.memberIds.includes(u.id) : false;
+          });
+
+          // Sort project members:
+          // 1. Designers first, sorted by hours value descending.
+          // 2. All other team members (non-designers).
+          const sortedMembers = [...projectMembers].sort((a, b) => {
+            const aIsDesigner = a.isDesigner;
+            const bIsDesigner = b.isDesigner;
+
+            if (aIsDesigner && !bIsDesigner) return -1;
+            if (!aIsDesigner && bIsDesigner) return 1;
+
+            if (aIsDesigner && bIsDesigner) {
+              const aHours = getDesignerHoursValue(a.id, draftProjectId);
+              const bHours = getDesignerHoursValue(b.id, draftProjectId);
+              if (aHours !== bHours) {
+                return bHours - aHours; // Descending hours
+              }
+            }
+
+            return a.name.localeCompare(b.name);
+          });
+
+          const selectAssigneeData = [
+            { value: '', label: 'Не призначено' },
+            ...sortedMembers.map((d) => ({
+              value: d.id,
+              label: d.name // Clean name and surname only, NO hours!
+            }))
+          ];
+
           return (
             <Stack gap="md" style={{ overflow: 'visible' }}>
               <Group grow gap="md">
@@ -1074,12 +1167,25 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       onBlur={() => setEditingProjectId(false)}
                       onClick={(e) => e.stopPropagation()}
                       autoFocus
+                      defaultDropdownOpened
                       searchable
                       placeholder="Пошук проєкту..."
                       variant="unstyled"
+                      comboboxProps={{ width: 'target', dropdownPadding: 4, zIndex: 1000 }}
                       styles={{ 
-                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' },
-                        dropdown: { zIndex: 1000 }
+                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
+                        root: { width: '100%' },
+                        wrapper: { width: '100%' }
+                      }}
+                      renderOption={({ option }) => {
+                        if (option.value === 'CREATE_NEW') {
+                          return (
+                            <Text fw={700} c="indigo" size="sm">
+                              {option.label}
+                            </Text>
+                          );
+                        }
+                        return <Text size="sm">{option.label}</Text>;
                       }}
                     />
                   ) : (
@@ -1110,18 +1216,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   <Text size="xs" fw={700} c="dimmed" mb="2px">ВИКОНАВЕЦЬ</Text>
                   {editingDesignerId ? (
                     <Select
-                      data={[
-                        { value: '', label: 'Не призначено' },
-                        ...users
-                          .filter((u) => {
-                            const proj = projects.find((p) => p.id === draftProjectId);
-                            return proj ? proj.memberIds.includes(u.id) : false;
-                          })
-                          .map((d) => ({
-                            value: d.id,
-                            label: `${d.name} ${getDesignerHoursInfo(d.id, draftProjectId)}`
-                          }))
-                      ]}
+                      data={selectAssigneeData}
                       value={draftDesignerId || ''}
                       onChange={(val) => {
                         const designerId = val || null;
@@ -1132,10 +1227,13 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       onBlur={() => setEditingDesignerId(false)}
                       onClick={(e) => e.stopPropagation()}
                       autoFocus
+                      defaultDropdownOpened
                       variant="unstyled"
+                      comboboxProps={{ width: 'target', dropdownPadding: 4, zIndex: 1000 }}
                       styles={{ 
-                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' },
-                        dropdown: { zIndex: 1000 }
+                        input: { height: '24px', minHeight: '24px', padding: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', width: '100%' },
+                        root: { width: '100%' },
+                        wrapper: { width: '100%' }
                       }}
                       renderOption={({ option }) => {
                         if (!option.value) {
@@ -1146,6 +1244,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                           return <Text size="sm">{option.label}</Text>;
                         }
                         const isBase64 = designer.avatar && (designer.avatar.startsWith('data:image/') || designer.avatar.startsWith('http') || designer.avatar.startsWith('/'));
+                        const hoursInfo = getDesignerHoursInfo(designer.id, draftProjectId);
                         return (
                           <Group gap="xs" wrap="nowrap">
                             <Avatar size="xs" src={isBase64 ? designer.avatar : undefined} color="indigo" radius="xl">
@@ -1153,7 +1252,9 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                             </Avatar>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <Text size="sm" fw={600} truncate>{designer.name}</Text>
-                              <Text size="10px" c="dimmed" truncate>{designer.role} {getDesignerHoursInfo(designer.id, draftProjectId)}</Text>
+                              <Text size="10px" c="dimmed" truncate>
+                                {designer.role} {designer.isDesigner ? hoursInfo : ''}
+                              </Text>
                             </div>
                           </Group>
                         );
@@ -1172,9 +1273,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                             );
                           })()}
                           <Text size="sm" fw={600} truncate>{currentDesigner.name}</Text>
-                          <Text size="10px" c="dimmed" style={{ flexShrink: 0 }}>
-                            ({getDesignerHoursInfo(currentDesigner.id, draftProjectId).split(' ').shift()} год)
-                          </Text>
                         </Group>
                       ) : (
                         <Text size="sm" fw={600} c="dimmed">Не призначено</Text>

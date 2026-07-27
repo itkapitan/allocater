@@ -475,12 +475,17 @@ app.post('/api/upload', async (req, res) => {
     if (!image) {
       return res.status(400).json({ error: 'No image provided' });
     }
-    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return res.status(400).json({ error: 'Invalid base64 image format' });
+    let ext = 'png';
+    let buffer;
+    
+    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,([\s\S]+)$/);
+    if (matches && matches.length === 3) {
+      ext = matches[1].split('/')[1] || 'png';
+      if (ext === 'jpeg') ext = 'jpg';
+      buffer = Buffer.from(matches[2].replace(/\s/g, ''), 'base64');
+    } else {
+      buffer = Buffer.from(image.replace(/\s/g, ''), 'base64');
     }
-    const ext = matches[1].split('/')[1] || 'png';
-    const buffer = Buffer.from(matches[2], 'base64');
     const filename = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
     
     if (process.env.BLOB_READ_WRITE_TOKEN) {
