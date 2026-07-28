@@ -570,6 +570,31 @@ app.get('/api/uploads/:filename', async (req, res) => {
   }
 });
 
+// Helper to search for a file recursively in a directory
+function findFileRecursive(dir, filename) {
+  try {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      let stat;
+      try {
+        stat = fs.statSync(fullPath);
+      } catch (e) {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        const found = findFileRecursive(fullPath, filename);
+        if (found) return found;
+      } else if (file.toLowerCase() === filename.toLowerCase()) {
+        return fullPath;
+      }
+    }
+  } catch (err) {
+    // ignored
+  }
+  return null;
+}
+
 // Endpoint to import task from JSON and upload local images to public/uploads or DB
 app.post('/api/tasks/import-json', async (req, res) => {
   try {
@@ -580,36 +605,74 @@ app.post('/api/tasks/import-json', async (req, res) => {
 
     const blocks = editorData.blocks;
     for (const block of blocks) {
-      if (block.type === 'image' && block.data && block.data.file && block.data.file.url) {
-        const rawUrl = block.data.file.url;
-        let resolvedPath = rawUrl;
+      if (block.type === 'image' && block.data) {
+        const fileUrl = block.data.file ? block.data.file.url : '';
+        const caption = block.data.caption || '';
         
-        // 1. Handle file:// URLs
-        if (resolvedPath.startsWith('file:')) {
-          try {
-            resolvedPath = fileURLToPath(resolvedPath);
-          } catch (e) {
-            // Fallback decoding if fileURLToPath fails
-            resolvedPath = decodeURIComponent(resolvedPath.replace(/^file:\/\/\/?/, ''));
-            // Restore absolute path formatting for Unix/Windows if needed
-            if (!/^[a-zA-Z]:/.test(resolvedPath) && !resolvedPath.startsWith('/')) {
-              resolvedPath = '/' + resolvedPath;
-            }
+        let filenameToFind = null;
+        
+        // 1. Try to extract filename from URL (if it is a path or filename)
+        if (fileUrl && !fileUrl.startsWith('data:')) {
+          const baseName = path.basename(fileUrl);
+          if (/\.(jpg|jpeg|png|webp|gif)$/i.test(baseName)) {
+            filenameToFind = baseName;
           }
-        } else {
-          // 2. Decode percent encoded paths (e.g. %20 instead of spaces)
-          try {
-            resolvedPath = decodeURIComponent(resolvedPath);
-          } catch (e) {
-            // keep it as is
+        }
+        
+        // 2. If url is a placeholder (starts with data:image/gif or similar),
+        // try to extract the filename from the caption!
+        if (!filenameToFind || fileUrl.startsWith('data:image/gif')) {
+          const match = caption.match(/([a-zA-Z0-9_\-\s]+\.(?:jpg|jpeg|png|webp|gif))/i);
+          if (match) {
+            filenameToFind = match[1].trim();
           }
         }
 
-        // Check if it is a local absolute path (starting with / or a windows drive letter)
-        const isLocalPath = path.isAbsolute(resolvedPath) || /^[a-zA-Z]:\\/.test(resolvedPath) || /^[a-zA-Z]:\//.test(resolvedPath);
-        if (isLocalPath) {
-          try {
-            if (fs.existsSync(resolvedPath)) {
+        if (filenameToFind) {
+          let resolvedPath = null;
+          
+          // If the URL was a local path, check direct existence
+          if (fileUrl && !fileUrl.startsWith('data:')) {
+            let directPath = fileUrl;
+            if (directPath.startsWith('file:')) {
+              try {
+                directPath = fileURLToPath(directPath);
+              } catch (e) {
+                directPath = decodeURIComponent(directPath.replace(/^file:\/\/\/?/, ''));
+                if (!/^[a-zA-Z]:/.test(directPath) && !directPath.startsWith('/')) {
+                  directPath = '/' + directPath;
+                }
+              }
+            } else {
+              try {
+                directPath = decodeURIComponent(directPath);
+              } catch (e) {}
+            }
+            if (fs.existsSync(directPath)) {
+              resolvedPath = directPath;
+            }
+          }
+          
+          // If not found directly, search recursively in standard folders
+          if (!resolvedPath) {
+            const homeDir = require('os').homedir();
+            const searchRoots = [
+              path.join(homeDir, 'Documents', 'Screen Video'),
+              path.join(homeDir, 'Downloads'),
+              path.join(homeDir, 'Desktop')
+            ];
+            for (const root of searchRoots) {
+              if (fs.existsSync(root)) {
+                resolvedPath = findFileRecursive(root, filenameToFind);
+                if (resolvedPath) {
+                  break;
+                }
+              }
+            }
+          }
+
+          if (resolvedPath && fs.existsSync(resolvedPath)) {
+            try {
               const buffer = fs.readFileSync(resolvedPath);
               const extname = path.extname(resolvedPath).toLowerCase().replace('.', '');
               let mimetype = 'image/png';
@@ -662,12 +725,13 @@ app.post('/api/tasks/import-json', async (req, res) => {
                   newUrl = `/api/uploads/${filename}`;
                 }
               }
+              if (!block.data.file) block.data.file = {};
               block.data.file.url = newUrl;
-            } else {
-              console.warn(`Import JSON: Local file does not exist: ${resolvedPath}`);
+            } catch (fileErr) {
+              console.error(`Import JSON: Failed to read local file ${resolvedPath}:`, fileErr);
             }
-          } catch (fileErr) {
-            console.error(`Import JSON: Failed to read local file ${resolvedPath}:`, fileErr);
+          } else {
+            console.warn(`Import JSON: Could not locate screenshot file on local machine: ${filenameToFind}`);
           }
         }
       }
