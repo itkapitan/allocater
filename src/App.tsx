@@ -920,7 +920,7 @@ export const App: React.FC = () => {
       setProjects((prev) =>
         prev.map((p) =>
           p.id === existingProjectId
-            ? { ...p, isArchived: false, color: color || p.color, memberIds: memberIds.length > 0 ? memberIds : p.memberIds }
+            ? { ...p, isArchived: false, name: name.trim() || p.name, color: color || p.color, memberIds }
             : p
         )
       );
@@ -928,8 +928,8 @@ export const App: React.FC = () => {
       fetch(`/api/projects/${existingProjectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isArchived: false, color, memberIds }),
-      }).catch((err) => console.error('Error unarchiving project in SQLite:', err));
+        body: JSON.stringify({ isArchived: false, name: name.trim(), color, memberIds }),
+      }).catch((err) => console.error('Error updating project in SQLite:', err));
       
       return;
     }

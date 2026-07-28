@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Group, TextInput, Button, Text, Stack, ActionIcon, Select } from '@mantine/core';
+import { Group, TextInput, Button, Text, Stack, ActionIcon, Select, ColorInput } from '@mantine/core';
 import { IconPlus, IconX, IconFolder } from '@tabler/icons-react';
 import type { User, Project } from '../types';
 
@@ -9,10 +9,24 @@ interface AddProjectRowProps {
   onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
 }
 
+const resolveProjectColor = (color: string | undefined): string => {
+  if (!color) return '#6366f1';
+  const mapping: Record<string, string> = {
+    indigo: '#6366f1',
+    blue: '#3b82f6',
+    teal: '#0d9488',
+    emerald: '#10b981',
+    orange: '#f59e0b',
+    rose: '#f43f5e',
+  };
+  return mapping[color.toLowerCase()] || color;
+};
+
 export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, onAddProject }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('new');
   const [name, setName] = useState('');
+  const [color, setColor] = useState('#6366f1');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   const handleMemberToggle = (userId: string) => {
@@ -27,26 +41,27 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
     if (value === 'new') {
       setName('');
       setSelectedMembers([]);
+      setColor('#6366f1');
     } else {
       const existingProject = projects.find((p) => p.id === value);
       if (existingProject) {
         setName(existingProject.name);
         setSelectedMembers(existingProject.memberIds || []);
+        setColor(resolveProjectColor(existingProject.color));
       }
     }
   };
 
   const handleSave = () => {
+    if (!name.trim()) return;
     if (selectedProjectId === 'new') {
-      if (!name.trim()) return;
-      onAddProject(name.trim(), 'indigo', selectedMembers);
+      onAddProject(name.trim(), color, selectedMembers);
     } else {
-      const existingProject = projects.find((p) => p.id === selectedProjectId);
-      if (!existingProject) return;
-      onAddProject(existingProject.name, existingProject.color || 'indigo', selectedMembers, selectedProjectId);
+      onAddProject(name.trim(), color, selectedMembers, selectedProjectId);
     }
     setName('');
     setSelectedMembers([]);
+    setColor('#6366f1');
     setSelectedProjectId('new');
     setIsExpanded(false);
   };
@@ -113,7 +128,7 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
           leftSection={<IconFolder size={16} color="var(--primary-color)" />}
         />
 
-        {selectedProjectId === 'new' && (
+        {selectedProjectId === 'new' ? (
           <TextInput
             ref={inputRef}
             label="Назва проєкту"
@@ -121,8 +136,27 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
             required
+            radius="md"
+          />
+        ) : (
+          <TextInput
+            label="Редагувати назву проєкту"
+            placeholder="Введіть назву"
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            required
+            radius="md"
           />
         )}
+
+        <ColorInput
+          label="Колір проєкту"
+          value={color}
+          onChange={setColor}
+          swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
+          required
+          radius="md"
+        />
 
         <div>
           <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Команда проєкту</Text>

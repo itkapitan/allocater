@@ -61,6 +61,19 @@ interface TaskTrackerProps {
   onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
 }
 
+export const resolveProjectColor = (color: string | undefined): string => {
+  if (!color) return '#6366f1';
+  const mapping: Record<string, string> = {
+    indigo: '#6366f1',
+    blue: '#3b82f6',
+    teal: '#0d9488',
+    emerald: '#10b981',
+    orange: '#f59e0b',
+    rose: '#f43f5e',
+  };
+  return mapping[color.toLowerCase()] || color;
+};
+
 export const TaskTracker: React.FC<TaskTrackerProps> = ({
   isAdmin,
   activeSpaceId,
@@ -100,6 +113,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const [editColumnModalOpened, setEditColumnModalOpened] = useState(false);
   const [editingColumn, setEditingColumn] = useState<any | null>(null);
   const [newProjectModalOpened, setNewProjectModalOpened] = useState(false);
+  const [newCardColumnId, setNewCardColumnId] = useState('');
+  const [editingProject, setEditingProject] = useState<any | null>(null);
 
   // Draft form states
   const [newColName, setNewColName] = useState('');
@@ -197,7 +212,9 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
       ...overrideFields
     };
 
-    onUpdateCard(selectedTask.id, updatedFields);
+    if (selectedTask.id !== 'new-task-temp') {
+      onUpdateCard(selectedTask.id, updatedFields);
+    }
     setSelectedTask((prev: any) => prev ? { ...prev, ...updatedFields } : null);
   };
 
@@ -597,14 +614,80 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   };
 
   const handleCreateTask = (columnId: string) => {
-    const defaultProject = activeProjects[0]?.id || '';
-    onAddCard({
-      title: 'Нова задача',
+    setNewCardColumnId(columnId);
+    
+    const dummyTask = {
+      id: 'new-task-temp',
+      title: '',
       description: '',
-      projectId: defaultProject,
+      projectId: activeProjects[0]?.id || '',
       designerId: null,
-      columnId
-    });
+      columnId: columnId
+    };
+    
+    setSelectedTask(dummyTask);
+    setDraftTitle('');
+    setDraftDesc('');
+    setDraftProjectId(activeProjects[0]?.id || '');
+    setDraftDesignerId(null);
+    
+    setEditingTitle(true);
+    setEditingProjectId(true);
+    setEditingDesignerId(true);
+    setEditingDesc(false);
+    
+    setTaskModalOpened(true);
+  };
+
+  const handleSaveNewTask = () => {
+    if (editingDesc && editorInstanceRef.current) {
+      editorInstanceRef.current.save().then((savedData) => {
+        const jsonStr = JSON.stringify(savedData);
+        setDraftDesc(jsonStr);
+        finalizeNewTask(jsonStr);
+      }).catch((err) => {
+        console.error('Error saving desc before saving new task:', err);
+        finalizeNewTask(draftDesc);
+      });
+    } else {
+      finalizeNewTask(draftDesc);
+    }
+  };
+
+  const finalizeNewTask = (desc: string) => {
+    const hasContent = draftTitle.trim() !== '' || 
+                       (desc.trim() !== '' && desc !== '{"blocks":[]}' && desc !== '[]') || 
+                       draftDesignerId !== null;
+
+    if (hasContent) {
+      onAddCard({
+        title: draftTitle.trim() || 'Нова задача',
+        description: desc,
+        projectId: draftProjectId || activeProjects[0]?.id || '',
+        designerId: draftDesignerId || null,
+        columnId: newCardColumnId
+      });
+    }
+    setTaskModalOpened(false);
+    setSelectedTask(null);
+  };
+
+  const handleCloseTaskModalCheck = () => {
+    if (!selectedTask) return;
+    if (selectedTask.id === 'new-task-temp') {
+      if (editingDesc && editorInstanceRef.current) {
+        editorInstanceRef.current.save().then((savedData) => {
+          const jsonStr = JSON.stringify(savedData);
+          finalizeNewTask(jsonStr);
+        }).catch(() => {
+          finalizeNewTask(draftDesc);
+        });
+      } else {
+        finalizeNewTask(draftDesc);
+      }
+    } else {
+      handleSaveTaskDetails();
+    }
   };
 
   // Format total hours allocated to designer for a project this week (sprint)
@@ -674,13 +757,26 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     return Math.round(totalSprintHours * 10) / 10;
   };
 
-  // Create Project Callback from Tracker Drawer
+  const handleStartEditProject = (project: any) => {
+    setEditingProject(project);
+    setNewProjName(project.name);
+    setNewProjColor(project.color || '#6366f1');
+    setNewProjMembers(project.memberIds || []);
+    setNewProjectModalOpened(true);
+  };
+
+  // Create/Edit Project Callback from Tracker Drawer
   const handleCreateProjectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjName.trim()) return;
 
-    onAddProject(newProjName.trim(), newProjColor, newProjMembers);
+    if (editingProject) {
+      onAddProject(newProjName.trim(), newProjColor, newProjMembers, editingProject.id);
+    } else {
+      onAddProject(newProjName.trim(), newProjColor, newProjMembers);
+    }
     setNewProjectModalOpened(false);
+    setEditingProject(null);
     setNewProjName('');
     setNewProjColor('#6366f1');
     setNewProjMembers([]);
@@ -786,6 +882,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                             >
                               {colTasks.map((task, idx) => {
                                 const project = projects.find((p) => p.id === task.projectId);
+                                const resolvedProjColor = project ? resolveProjectColor(project.color) : '#6366f1';
                                 const designer = users.find((u) => u.id === task.designerId);
                                 const taskAttachs = attachments.filter((a) => a.taskId === task.id);
                                 const taskUrls = links.filter((l) => l.taskId === task.id);
@@ -806,7 +903,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                                           backgroundColor: '#ffffff',
                                           cursor: 'pointer',
                                           boxShadow: '0 2px 8px -2px rgba(0,0,0,0.04)',
-                                          borderLeft: project ? `4px solid ${project.color}` : '1px solid var(--border-color)',
+                                          borderLeft: project ? `4px solid ${resolvedProjColor}` : '1px solid var(--border-color)',
                                           transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                                         }}
                                         className="kanban-card"
@@ -817,9 +914,9 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                                               size="xs"
                                               variant="light"
                                               style={{
-                                                backgroundColor: `${project.color}15`,
-                                                color: project.color,
-                                                borderColor: `${project.color}30`
+                                                backgroundColor: `${resolvedProjColor}15`,
+                                                color: resolvedProjColor,
+                                                borderColor: `${resolvedProjColor}30`
                                               }}
                                             >
                                               {project.name}
@@ -1044,9 +1141,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
       {/* 3. Modal: Task details (Edit card) */}
       <Modal
         opened={taskModalOpened}
-        onClose={() => {
-          handleSaveTaskDetails();
-        }}
+        onClose={handleCloseTaskModalCheck}
         title={
           editingTitle ? (
             <TextInput
@@ -1088,7 +1183,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
         {selectedTask && (() => {
           const currentProject = projects.find((p) => p.id === draftProjectId);
           const currentProjectName = currentProject ? currentProject.name : 'Не обрано';
-          const currentProjectColor = currentProject ? currentProject.color : 'indigo';
+          const currentProjectColor = currentProject ? resolveProjectColor(currentProject.color) : '#6366f1';
           const currentDesigner = users.find((u) => u.id === draftDesignerId);
 
           // Get project members
@@ -1206,9 +1301,25 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                       }}
                     />
                   ) : (
-                    <Group gap="xs" style={{ height: '24px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentProjectColor || 'indigo' }} />
-                      <Text size="sm" fw={600} truncate>{currentProjectName}</Text>
+                    <Group gap="xs" style={{ height: '24px', width: '100%', justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                      <Group gap="xs" style={{ minWidth: 0, flexGrow: 1 }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentProjectColor || 'indigo', flexShrink: 0 }} />
+                        <Text size="sm" fw={600} truncate style={{ minWidth: 0 }}>{currentProjectName}</Text>
+                      </Group>
+                      {currentProject && (
+                        <ActionIcon 
+                          size="xs" 
+                          variant="subtle" 
+                          color="gray"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEditProject(currentProject);
+                          }}
+                          title="Редагувати проєкт"
+                        >
+                          <IconPencil size={12} />
+                        </ActionIcon>
+                      )}
                     </Group>
                   )}
                 </div>
@@ -1369,24 +1480,43 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
               {/* Actions bottom */}
               <Group justify="space-between">
-                <Button
-                  color="red"
-                  variant="light"
-                  leftSection={<IconTrash size={14} />}
-                  onClick={() => {
-                    onDeleteCard(selectedTask.id);
-                    setTaskModalOpened(false);
-                    setSelectedTask(null);
-                  }}
-                >
-                  Виделити задачу
-                </Button>
+                {selectedTask.id === 'new-task-temp' ? (
+                  <Button
+                    variant="subtle"
+                    color="gray"
+                    onClick={() => {
+                      setTaskModalOpened(false);
+                      setSelectedTask(null);
+                    }}
+                  >
+                    Скасувати
+                  </Button>
+                ) : (
+                  <Button
+                    color="red"
+                    variant="light"
+                    leftSection={<IconTrash size={14} />}
+                    onClick={() => {
+                      onDeleteCard(selectedTask.id);
+                      setTaskModalOpened(false);
+                      setSelectedTask(null);
+                    }}
+                  >
+                    Видалити задачу
+                  </Button>
+                )}
 
                 <Button 
                   color="indigo" 
-                  onClick={handleSaveTaskDetails}
+                  onClick={() => {
+                    if (selectedTask.id === 'new-task-temp') {
+                      handleSaveNewTask();
+                    } else {
+                      handleSaveTaskDetails();
+                    }
+                  }}
                 >
-                  Закрити
+                  {selectedTask.id === 'new-task-temp' ? 'Зберегти' : 'Закрити'}
                 </Button>
               </Group>
             </Stack>
@@ -1394,15 +1524,21 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
         })()}
       </Modal>
 
-      {/* 4. Modal: Project Creation from Kanban Details */}
+      {/* 4. Modal: Project Creation/Editing from Kanban Details */}
       <Modal
         opened={newProjectModalOpened}
-        onClose={() => setNewProjectModalOpened(false)}
+        onClose={() => {
+          setNewProjectModalOpened(false);
+          setEditingProject(null);
+          setNewProjName('');
+          setNewProjColor('#6366f1');
+          setNewProjMembers([]);
+        }}
         title={
           <Group gap="xs">
             <IconNotebook size={20} color="var(--primary-color)" />
             <Text fw={800} size="md">
-              Створення нового проєкту
+              {editingProject ? 'Редагування проєкту' : 'Створення нового проєкту'}
             </Text>
           </Group>
         }
@@ -1453,11 +1589,21 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
             </Stack>
 
             <Group justify="flex-end" gap="xs" mt="md">
-              <Button variant="subtle" color="gray" onClick={() => setNewProjectModalOpened(false)}>
+              <Button 
+                variant="subtle" 
+                color="gray" 
+                onClick={() => {
+                  setNewProjectModalOpened(false);
+                  setEditingProject(null);
+                  setNewProjName('');
+                  setNewProjColor('#6366f1');
+                  setNewProjMembers([]);
+                }}
+              >
                 Скасувати
               </Button>
               <Button type="submit" color="indigo">
-                Створити проєкт
+                {editingProject ? 'Зберегти зміни' : 'Створити проєкт'}
               </Button>
             </Group>
           </Stack>
