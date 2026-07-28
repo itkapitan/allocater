@@ -569,6 +569,96 @@ app.get('/api/uploads/:filename', async (req, res) => {
   }
 });
 
+// Endpoint to import task from JSON and upload local images to public/uploads or DB
+app.post('/api/tasks/import-json', async (req, res) => {
+  try {
+    const { title, editorData } = req.body;
+    if (!editorData || !editorData.blocks) {
+      return res.status(400).json({ error: 'Invalid editorData format' });
+    }
+
+    const blocks = editorData.blocks;
+    for (const block of blocks) {
+      if (block.type === 'image' && block.data && block.data.file && block.data.file.url) {
+        const fileUrl = block.data.file.url;
+        // Check if it is a local absolute path (starting with / or a windows drive letter)
+        const isLocalPath = path.isAbsolute(fileUrl) || /^[a-zA-Z]:\\/.test(fileUrl);
+        if (isLocalPath) {
+          try {
+            if (fs.existsSync(fileUrl)) {
+              const buffer = fs.readFileSync(fileUrl);
+              const extname = path.extname(fileUrl).toLowerCase().replace('.', '');
+              let mimetype = 'image/png';
+              if (extname === 'jpg' || extname === 'jpeg') mimetype = 'image/jpeg';
+              else if (extname === 'gif') mimetype = 'image/gif';
+              else if (extname === 'webp') mimetype = 'image/webp';
+              
+              const ext = extname || 'png';
+              const filename = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+              
+              let newUrl = '';
+              if (process.env.BLOB_READ_WRITE_TOKEN) {
+                const { put } = await import('@vercel/blob');
+                const blob = await put(`uploads/${filename}`, buffer, {
+                  access: 'public',
+                });
+                newUrl = blob.url;
+              } else {
+                try {
+                  const targetDir = path.join(__dirname, 'public', 'uploads');
+                  if (!fs.existsSync(targetDir)) {
+                    fs.mkdirSync(targetDir, { recursive: true });
+                  }
+                  fs.writeFileSync(path.join(targetDir, filename), buffer);
+                  newUrl = `/uploads/${filename}`;
+                } catch (fsErr) {
+                  console.warn('Local filesystem write failed for imported image, falling back to database storage:', fsErr.message);
+                  const base64Data = buffer.toString('base64');
+                  try {
+                    await executeQuery(
+                      'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
+                      [filename, mimetype, base64Data]
+                    );
+                  } catch (dbErr) {
+                    const errMsg = dbErr.message || '';
+                    if (errMsg.includes('relation "task_images" does not exist') || errMsg.includes('no such table: task_images')) {
+                      await executeQuery(`CREATE TABLE IF NOT EXISTS task_images (
+                        filename TEXT PRIMARY KEY,
+                        mimetype TEXT,
+                        data TEXT
+                      )`);
+                      await executeQuery(
+                        'INSERT INTO task_images (filename, mimetype, data) VALUES (?, ?, ?)',
+                        [filename, mimetype, base64Data]
+                      );
+                    } else {
+                      throw dbErr;
+                    }
+                  }
+                  newUrl = `/api/uploads/${filename}`;
+                }
+              }
+              block.data.file.url = newUrl;
+            } else {
+              console.warn(`Import JSON: Local file does not exist: ${fileUrl}`);
+            }
+          } catch (fileErr) {
+            console.error(`Import JSON: Failed to read local file ${fileUrl}:`, fileErr);
+          }
+        }
+      }
+    }
+
+    res.json({
+      title: title || 'Нова задача',
+      editorData
+    });
+  } catch (err) {
+    console.error('Import JSON error:', err);
+    res.status(500).json({ error: 'Failed to import JSON data', details: err.message });
+  }
+});
+
 // Project CRUD
 app.post('/api/projects', async (req, res) => {
   const { id, name, color, memberIds, spaceId } = req.body;

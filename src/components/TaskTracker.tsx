@@ -25,7 +25,8 @@ import {
   Tooltip,
   Badge,
   Divider,
-  ColorInput
+  ColorInput,
+  Textarea
 } from '@mantine/core';
 import {
   IconPlus,
@@ -33,7 +34,8 @@ import {
   IconPencil,
   IconNotebook,
   IconLink,
-  IconPaperclip
+  IconPaperclip,
+  IconDownload
 } from '@tabler/icons-react';
 import type { User, Project, Allocation } from '../types';
 
@@ -115,6 +117,9 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const [newProjectModalOpened, setNewProjectModalOpened] = useState(false);
   const [newCardColumnId, setNewCardColumnId] = useState('');
   const [editingProject, setEditingProject] = useState<any | null>(null);
+  const [jsonImportModalOpened, setJsonImportModalOpened] = useState(false);
+  const [jsonImportText, setJsonImportText] = useState('');
+  const [jsonImportError, setJsonImportError] = useState('');
 
   // Draft form states
   const [newColName, setNewColName] = useState('');
@@ -651,6 +656,73 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
       });
     } else {
       finalizeNewTask(draftDesc);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setJsonImportText(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportTaskFromJson = async () => {
+    try {
+      setJsonImportError('');
+      if (!jsonImportText.trim()) {
+        setJsonImportError('Будь ласка, введіть JSON');
+        return;
+      }
+      
+      let parsedJson: any;
+      try {
+        parsedJson = JSON.parse(jsonImportText.trim());
+      } catch (e: any) {
+        setJsonImportError(`Некоректний формат JSON: ${e.message}`);
+        return;
+      }
+
+      // Check if it has title and editorData/blocks
+      let title = parsedJson.title || '';
+      let editorData = parsedJson.editorData || (parsedJson.blocks ? parsedJson : null);
+
+      if (!editorData || !editorData.blocks) {
+        setJsonImportError('JSON повинен містити об\'єкт з блоками EditorJS (editorData або blocks)');
+        return;
+      }
+
+      const response = await fetch('/api/tasks/import-json', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title, editorData })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Помилка сервера при імпорті');
+      }
+
+      const result = await response.json();
+      
+      setDraftTitle(result.title);
+      const descStr = JSON.stringify(result.editorData);
+      setDraftDesc(descStr);
+      
+      setEditingDesc(false);
+      setEditingTitle(false);
+      
+      setJsonImportModalOpened(false);
+      setJsonImportText('');
+      setJsonImportError('');
+    } catch (err: any) {
+      console.error('Import task error:', err);
+      setJsonImportError(err.message || 'Невідома помилка при імпорті');
     }
   };
 
@@ -1222,6 +1294,23 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
           return (
             <Stack gap="md" style={{ overflow: 'visible' }}>
+              {selectedTask.id === 'new-task-temp' && (
+                <Group justify="flex-end">
+                  <Button
+                    variant="light"
+                    color="indigo"
+                    size="xs"
+                    leftSection={<IconDownload size={14} />}
+                    onClick={() => {
+                      setJsonImportModalOpened(true);
+                      setJsonImportText('');
+                      setJsonImportError('');
+                    }}
+                  >
+                    Імпорт з JSON
+                  </Button>
+                </Group>
+              )}
               <Group grow gap="md">
                 {/* Project Field (View / Edit inside the same box to prevent layout shift) */}
                 <div 
@@ -1608,6 +1697,80 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
             </Group>
           </Stack>
         </form>
+      </Modal>
+
+      {/* 5. Modal: JSON Import */}
+      <Modal
+        opened={jsonImportModalOpened}
+        onClose={() => {
+          setJsonImportModalOpened(false);
+          setJsonImportText('');
+          setJsonImportError('');
+        }}
+        title={
+          <Group gap="xs">
+            <IconDownload size={20} color="var(--primary-color)" />
+            <Text fw={800} size="md">
+              Імпорт задачі з JSON
+            </Text>
+          </Group>
+        }
+        centered
+        radius="md"
+        size="md"
+      >
+        <Stack gap="md">
+          <Text size="xs" c="dimmed">
+            Виберіть JSON-файл на комп'ютері або вставте його вміст у поле нижче. Локальні зображення, вказані в JSON, будуть завантажені на сервер.
+          </Text>
+
+          <Button
+            variant="outline"
+            color="indigo"
+            component="label"
+            size="sm"
+            styles={{ root: { cursor: 'pointer' } }}
+          >
+            Обрати JSON файл
+            <input
+              type="file"
+              accept=".json"
+              hidden
+              onChange={handleFileChange}
+            />
+          </Button>
+
+          <Textarea
+            label="Вміст JSON"
+            placeholder='{"title": "Заголовок", "editorData": { "blocks": [...] }}'
+            value={jsonImportText}
+            onChange={(e) => setJsonImportText(e.currentTarget.value)}
+            styles={{ input: { minHeight: '180px', fontFamily: 'monospace', fontSize: '12px' } }}
+          />
+
+          {jsonImportError && (
+            <Text size="xs" color="red" fw={600}>
+              {jsonImportError}
+            </Text>
+          )}
+
+          <Group justify="flex-end" gap="xs" mt="md">
+            <Button
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                setJsonImportModalOpened(false);
+                setJsonImportText('');
+                setJsonImportError('');
+              }}
+            >
+              Скасувати
+            </Button>
+            <Button color="indigo" onClick={handleImportTaskFromJson}>
+              Імпортувати
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </div>
   );
