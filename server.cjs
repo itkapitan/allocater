@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { put } = require('@vercel/blob');
+const { fileURLToPath } = require('url');
 
 const app = express();
 const PORT = process.env.PORT || 5101;
@@ -580,14 +581,37 @@ app.post('/api/tasks/import-json', async (req, res) => {
     const blocks = editorData.blocks;
     for (const block of blocks) {
       if (block.type === 'image' && block.data && block.data.file && block.data.file.url) {
-        const fileUrl = block.data.file.url;
+        const rawUrl = block.data.file.url;
+        let resolvedPath = rawUrl;
+        
+        // 1. Handle file:// URLs
+        if (resolvedPath.startsWith('file:')) {
+          try {
+            resolvedPath = fileURLToPath(resolvedPath);
+          } catch (e) {
+            // Fallback decoding if fileURLToPath fails
+            resolvedPath = decodeURIComponent(resolvedPath.replace(/^file:\/\/\/?/, ''));
+            // Restore absolute path formatting for Unix/Windows if needed
+            if (!/^[a-zA-Z]:/.test(resolvedPath) && !resolvedPath.startsWith('/')) {
+              resolvedPath = '/' + resolvedPath;
+            }
+          }
+        } else {
+          // 2. Decode percent encoded paths (e.g. %20 instead of spaces)
+          try {
+            resolvedPath = decodeURIComponent(resolvedPath);
+          } catch (e) {
+            // keep it as is
+          }
+        }
+
         // Check if it is a local absolute path (starting with / or a windows drive letter)
-        const isLocalPath = path.isAbsolute(fileUrl) || /^[a-zA-Z]:\\/.test(fileUrl);
+        const isLocalPath = path.isAbsolute(resolvedPath) || /^[a-zA-Z]:\\/.test(resolvedPath) || /^[a-zA-Z]:\//.test(resolvedPath);
         if (isLocalPath) {
           try {
-            if (fs.existsSync(fileUrl)) {
-              const buffer = fs.readFileSync(fileUrl);
-              const extname = path.extname(fileUrl).toLowerCase().replace('.', '');
+            if (fs.existsSync(resolvedPath)) {
+              const buffer = fs.readFileSync(resolvedPath);
+              const extname = path.extname(resolvedPath).toLowerCase().replace('.', '');
               let mimetype = 'image/png';
               if (extname === 'jpg' || extname === 'jpeg') mimetype = 'image/jpeg';
               else if (extname === 'gif') mimetype = 'image/gif';
@@ -640,10 +664,10 @@ app.post('/api/tasks/import-json', async (req, res) => {
               }
               block.data.file.url = newUrl;
             } else {
-              console.warn(`Import JSON: Local file does not exist: ${fileUrl}`);
+              console.warn(`Import JSON: Local file does not exist: ${resolvedPath}`);
             }
           } catch (fileErr) {
-            console.error(`Import JSON: Failed to read local file ${fileUrl}:`, fileErr);
+            console.error(`Import JSON: Failed to read local file ${resolvedPath}:`, fileErr);
           }
         }
       }

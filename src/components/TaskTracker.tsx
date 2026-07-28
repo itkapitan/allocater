@@ -4,6 +4,8 @@ import EditorJS from '@editorjs/editorjs';
 import List from '@editorjs/list';
 // @ts-ignore
 import ImageTool from '@editorjs/image';
+// @ts-ignore
+import Header from '@editorjs/header';
 import {
   DragDropContext,
   Droppable,
@@ -497,6 +499,15 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           holder: 'editorjs-container',
           data: parseDescriptionToEditorData(draftDesc),
           tools: {
+            header: {
+              class: Header,
+              inlineToolbar: true,
+              config: {
+                placeholder: 'Введіть заголовок',
+                levels: [2, 3, 4],
+                defaultLevel: 2
+              }
+            },
             list: {
               class: List,
               inlineToolbar: true,
