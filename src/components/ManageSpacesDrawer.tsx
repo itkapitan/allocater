@@ -81,15 +81,17 @@ export const ManageSpacesDrawer: React.FC<ManageSpacesDrawerProps> = ({
     onClose();
   };
 
-  // Filter users by search query
-  const filteredUsers = users.filter((u) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      u.name.toLowerCase().includes(q) ||
-      u.role.toLowerCase().includes(q)
-    );
-  });
+  // Filter and sort users by search query
+  const filteredUsers = users
+    .filter((u) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        u.name.toLowerCase().includes(q) ||
+        u.role.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
 
   // Check if all visible users are selected
   const allVisibleSelected =

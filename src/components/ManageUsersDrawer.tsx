@@ -289,7 +289,16 @@ export const ManageUsersDrawer: React.FC<ManageUsersDrawerProps> = ({
             paddingRight: "4px",
           }}
         >
-          {users.map((user) => {
+          {users
+            .slice()
+            .sort((a, b) => {
+              const aTrack = a.isDesigner;
+              const bTrack = b.isDesigner;
+              if (aTrack && !bTrack) return -1;
+              if (!aTrack && bTrack) return 1;
+              return a.name.localeCompare(b.name, 'uk');
+            })
+            .map((user) => {
             const isBase64Image =
               user.avatar &&
               (user.avatar.startsWith("data:image/") ||

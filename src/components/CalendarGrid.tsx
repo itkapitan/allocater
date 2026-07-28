@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress } from '@mantine/core';
-import { IconUserPlus, IconTrash, IconDotsVertical } from '@tabler/icons-react';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress, TextInput } from '@mantine/core';
+import { IconUserPlus, IconTrash, IconDotsVertical, IconSearch } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
@@ -112,6 +112,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
   const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
   // Formatter helper
   const formatDateString = (date: Date) => {
@@ -521,6 +522,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
                     const projectDesigners = projectMembers.filter((u) => u.isDesigner);
                     const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
+                    const filteredNonProjectUsers = nonProjectUsers.filter((u) => {
+                      const q = memberSearchQuery.toLowerCase().trim();
+                      if (!q) return true;
+                      return u.name.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
+                    });
                     const startOfWeekStr = formatDateString(days[0]);
                     const endOfWeekStr = formatDateString(days[days.length - 1]);
 
@@ -616,7 +622,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             {projectMembers.map((member) => {
                               const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
                               return (
-                                <Menu key={member.id} shadow="md" width={220} trigger="click" disabled={!isAdmin}>
+                                <Menu 
+                                  key={member.id} 
+                                  shadow="md" 
+                                  width={220} 
+                                  trigger="click" 
+                                  disabled={!isAdmin}
+                                  onClose={() => setMemberSearchQuery('')}
+                                >
                                   <Menu.Target>
                                     <Tooltip
                                       label={
@@ -650,10 +663,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                   </Menu.Target>
                                   <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
                                     <Menu.Label>Замінити виконавця</Menu.Label>
-                                    {nonProjectUsers.length === 0 ? (
-                                      <Menu.Item disabled>Немає інших користувачів</Menu.Item>
+                                    <div style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
+                                      <TextInput
+                                        placeholder="Пошук..."
+                                        size="xs"
+                                        value={memberSearchQuery}
+                                        onChange={(e) => setMemberSearchQuery(e.currentTarget.value)}
+                                        leftSection={<IconSearch size={12} />}
+                                      />
+                                    </div>
+                                    <Menu.Divider />
+                                    {filteredNonProjectUsers.length === 0 ? (
+                                      <Menu.Item disabled>
+                                        {nonProjectUsers.length === 0 ? 'Немає інших користувачів' : 'Немає результатів пошуку'}
+                                      </Menu.Item>
                                     ) : (
-                                      nonProjectUsers.map((u) => (
+                                      filteredNonProjectUsers.map((u) => (
                                         <Menu.Item
                                           key={u.id}
                                           onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
@@ -693,7 +718,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             })}
 
                             {isAdmin && (
-                              <Menu shadow="md" width={220}>
+                              <Menu 
+                                shadow="md" 
+                                width={220}
+                                onClose={() => setMemberSearchQuery('')}
+                              >
                                 <Menu.Target>
                                   <ActionIcon 
                                     variant="light" 
@@ -712,16 +741,26 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 </Menu.Target>
                                 <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
                                   <Menu.Label>Додати виконавця</Menu.Label>
-                                  {users.filter(u => !project.memberIds.includes(u.id)).length === 0 ? (
-                                    <Menu.Item disabled>Усі вже додані</Menu.Item>
+                                  <div style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
+                                    <TextInput
+                                      placeholder="Пошук..."
+                                      size="xs"
+                                      value={memberSearchQuery}
+                                      onChange={(e) => setMemberSearchQuery(e.currentTarget.value)}
+                                      leftSection={<IconSearch size={12} />}
+                                    />
+                                  </div>
+                                  <Menu.Divider />
+                                  {filteredNonProjectUsers.length === 0 ? (
+                                    <Menu.Item disabled>
+                                      {nonProjectUsers.length === 0 ? 'Усі вже додані' : 'Немає результатів пошуку'}
+                                    </Menu.Item>
                                   ) : (
-                                    users
-                                      .filter(u => !project.memberIds.includes(u.id))
-                                      .map(u => (
-                                        <Menu.Item
-                                          key={u.id}
-                                          onClick={() => onAddProjectMember(project.id, u.id)}
-                                        >
+                                    filteredNonProjectUsers.map(u => (
+                                      <Menu.Item
+                                        key={u.id}
+                                        onClick={() => onAddProjectMember(project.id, u.id)}
+                                      >
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             {(() => {
                                               const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));

@@ -537,6 +537,24 @@ export const App: React.FC = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUser),
     }).catch((err) => console.error('Error adding user to SQLite:', err));
+
+    // Automatically add newly created user to the active space
+    if (activeSpaceId) {
+      setSpaces((prev) =>
+        prev.map((space) => {
+          if (space.id === activeSpaceId) {
+            const updatedMemberIds = [...space.memberIds, newId];
+            fetch(`/api/spaces/${activeSpaceId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: space.name, memberIds: updatedMemberIds }),
+            }).catch((err) => console.error('Error adding user to space in backend:', err));
+            return { ...space, memberIds: updatedMemberIds };
+          }
+          return space;
+        })
+      );
+    }
   };
 
   const handleEditUser = (updatedUser: User) => {
@@ -1060,7 +1078,7 @@ export const App: React.FC = () => {
   };
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
-  const spaceUsers = users.filter((u) => activeSpace?.memberIds.includes(u.id));
+  const spaceUsers = users.filter((u) => activeSpace?.memberIds.includes(u.id)).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
   const spaceProjects = projects.filter((p) => p.spaceId === activeSpaceId);
   const spaceAllocations = allocations.filter((a) => spaceProjects.some((p) => p.id === a.projectId));
 
