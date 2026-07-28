@@ -27,6 +27,10 @@
       "dest": "/avatars/$1"
     },
     {
+      "src": "/uploads/(.*)",
+      "dest": "/uploads/$1"
+    },
+    {
       "src": "/favicon.svg",
       "dest": "/favicon.svg"
     },
