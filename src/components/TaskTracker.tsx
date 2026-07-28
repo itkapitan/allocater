@@ -697,7 +697,64 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
         return;
       }
 
-      // Check if it has title and editorData/blocks
+      // Check if it is an array of tasks
+      if (Array.isArray(parsedJson)) {
+        if (parsedJson.length === 0) {
+          setJsonImportError('Масив задач порожній');
+          return;
+        }
+
+        // Validate structure of each task in the array
+        for (let i = 0; i < parsedJson.length; i++) {
+          const item = parsedJson[i];
+          const itemEditorData = item.editorData || (item.blocks ? item : null);
+          if (!itemEditorData || !itemEditorData.blocks) {
+            setJsonImportError(`Задача за індексом ${i} не містить blocks або editorData`);
+            return;
+          }
+        }
+
+        // Process and import each task in the array
+        for (let i = 0; i < parsedJson.length; i++) {
+          const item = parsedJson[i];
+          const itemTitle = item.title || `Задача ${i + 1}`;
+          const itemEditorData = item.editorData || (item.blocks ? item : null);
+
+          const response = await fetch('/api/tasks/import-json', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ title: itemTitle, editorData: itemEditorData })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(`Помилка при імпорті "${itemTitle}": ${errData.error || 'Помилка сервера'}`);
+          }
+
+          const result = await response.json();
+
+          // Add the card directly to the column
+          onAddCard({
+            title: result.title,
+            description: JSON.stringify(result.editorData),
+            projectId: draftProjectId || activeProjects[0]?.id || '',
+            designerId: draftDesignerId || null,
+            columnId: newCardColumnId
+          });
+        }
+
+        // Close everything and reset
+        setJsonImportModalOpened(false);
+        setJsonImportText('');
+        setJsonImportError('');
+        setTaskModalOpened(false);
+        setSelectedTask(null);
+        return;
+      }
+
+      // Check if it has title and editorData/blocks (Single task import)
       let title = parsedJson.title || '';
       let editorData = parsedJson.editorData || (parsedJson.blocks ? parsedJson : null);
 
