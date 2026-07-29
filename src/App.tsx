@@ -1,22 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { MantineProvider, createTheme, Stack, Modal, Text, Button, Group, Avatar, SegmentedControl, Select, Paper, Divider, TextInput, PasswordInput } from '@mantine/core';
-import type { User, Project, Allocation, Space } from './types';
-import { DesignerHeader } from './components/DesignerHeader';
-import { CalendarGrid } from './components/CalendarGrid';
-import { AddProjectRow } from './components/AddProjectRow';
-import { ManageUsersDrawer } from './components/ManageUsersDrawer';
-import { ManageSpacesDrawer } from './components/ManageSpacesDrawer';
-import { TaskTracker } from './components/TaskTracker';
-import { IconNotebook, IconFolder, IconUsers, IconLogout, IconLogin, IconShield } from '@tabler/icons-react';
+import React, { useState, useEffect } from "react";
+import {
+  MantineProvider,
+  createTheme,
+  Stack,
+  Modal,
+  Text,
+  Button,
+  Group,
+  Avatar,
+  SegmentedControl,
+  Select,
+  Paper,
+  Divider,
+  TextInput,
+  PasswordInput,
+} from "@mantine/core";
+import type { User, Project, Allocation, Space } from "./types";
+import { DesignerHeader } from "./components/DesignerHeader";
+import { CalendarGrid } from "./components/CalendarGrid";
+import { AddProjectRow } from "./components/AddProjectRow";
+import { ManageUsersDrawer } from "./components/ManageUsersDrawer";
+import { ManageSpacesDrawer } from "./components/ManageSpacesDrawer";
+import { TaskTracker } from "./components/TaskTracker";
+import {
+  IconFolder,
+  IconUsers,
+  IconLogout,
+  IconLogin,
+  IconShield,
+} from "@tabler/icons-react";
 
 // Custom theme mapping
 const theme = createTheme({
-  fontFamily: 'var(--font-family)',
-  primaryColor: 'indigo',
+  fontFamily: "var(--font-family)",
+  primaryColor: "indigo",
   components: {
     Select: {
       defaultProps: {
-        checkIconPosition: 'right',
+        checkIconPosition: "right",
       },
     },
   },
@@ -25,22 +46,80 @@ const theme = createTheme({
 // Ukrainian Transliteration Helper
 const transliterate = (text: string): string => {
   const cyrillicToLatin: Record<string, string> = {
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'ґ': 'g', 'д': 'd', 'е': 'e', 'є': 'ye', 'ж': 'zh', 'з': 'z',
-    'и': 'y', 'і': 'i', 'ї': 'yi', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p',
-    'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
-    'ь': '', 'ю': 'yu', 'я': 'ya',
-    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'H', 'Ґ': 'G', 'Д': 'D', 'Е': 'E', 'Є': 'Ye', 'Ж': 'Zh', 'З': 'Z',
-    'И': 'Y', 'І': 'I', 'Ї': 'Yi', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N', 'О': 'O', 'П': 'P',
-    'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U', 'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Shch',
-    'Ь': '', 'Ю': 'Yu', 'Я': 'Ya'
+    а: "a",
+    б: "b",
+    в: "v",
+    г: "h",
+    ґ: "g",
+    д: "d",
+    е: "e",
+    є: "ye",
+    ж: "zh",
+    з: "z",
+    и: "y",
+    і: "i",
+    ї: "yi",
+    й: "y",
+    к: "k",
+    л: "l",
+    м: "m",
+    н: "n",
+    о: "o",
+    п: "p",
+    р: "r",
+    с: "s",
+    т: "t",
+    у: "u",
+    ф: "f",
+    х: "kh",
+    ц: "ts",
+    ч: "ch",
+    ш: "sh",
+    щ: "shch",
+    ь: "",
+    ю: "yu",
+    я: "ya",
+    А: "A",
+    Б: "B",
+    В: "V",
+    Г: "H",
+    Ґ: "G",
+    Д: "D",
+    Е: "E",
+    Є: "Ye",
+    Ж: "Zh",
+    З: "Z",
+    И: "Y",
+    І: "I",
+    Ї: "Yi",
+    Й: "Y",
+    К: "K",
+    Л: "L",
+    М: "M",
+    Н: "N",
+    О: "O",
+    П: "P",
+    Р: "R",
+    С: "S",
+    Т: "T",
+    У: "U",
+    Ф: "F",
+    Х: "Kh",
+    Ц: "Ts",
+    Ч: "Ch",
+    Ш: "Sh",
+    Щ: "Shch",
+    Ь: "",
+    Ю: "Yu",
+    Я: "Ya",
   };
   return text
-    .split('')
+    .split("")
     .map((char) => cyrillicToLatin[char] || char)
-    .join('')
+    .join("")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 };
 
 // Date to URL slug helper (e.g. 20-24_Lypnia or 31_Serpnia-4_Veresnia)
@@ -55,8 +134,18 @@ const getWeekUrlSlug = (start: Date): string => {
   const friday = daysList[4];
 
   const monthsLatin = [
-    'Sichnia', 'Liutogo', 'Bereznia', 'Kvitnia', 'Travnia', 'Chervnia',
-    'Lypnia', 'Serpnia', 'Veresnia', 'Zhovtnia', 'Lystopada', 'Grudnia'
+    "Sichnia",
+    "Liutogo",
+    "Bereznia",
+    "Kvitnia",
+    "Travnia",
+    "Chervnia",
+    "Lypnia",
+    "Serpnia",
+    "Veresnia",
+    "Zhovtnia",
+    "Lystopada",
+    "Grudnia",
   ];
 
   const monDay = monday.getDate();
@@ -72,8 +161,8 @@ const getWeekUrlSlug = (start: Date): string => {
 
 // Parser of URL slugs
 const parseUrlState = (pathname: string) => {
-  const parts = pathname.split('/').filter(Boolean);
-  let section: 'allocator' | 'tasks' = 'allocator';
+  const parts = pathname.split("/").filter(Boolean);
+  let section: "allocator" | "tasks" = "allocator";
   let parsedSpaceId: string | null = null;
   let parsedWeekStart: Date | null = null;
 
@@ -81,7 +170,7 @@ const parseUrlState = (pathname: string) => {
   let weekSlugIdx = 1;
 
   if (parts.length >= 1) {
-    if (parts[0] === 'allocator' || parts[0] === 'tasks') {
+    if (parts[0] === "allocator" || parts[0] === "tasks") {
       section = parts[0];
       spaceSlugIdx = 1;
       weekSlugIdx = 2;
@@ -126,13 +215,16 @@ const parseUrlState = (pathname: string) => {
 // Вспомогательный хелпер для форматирования даты в строку YYYY-MM-DD
 const formatDateStringHelper = (date: Date) => {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
 // Расчет временных сегментов аллокации в течение дня
-const getAllocationIntervals = (alloc: Omit<Allocation, 'id'>, capacity: number) => {
+const getAllocationIntervals = (
+  alloc: Omit<Allocation, "id">,
+  capacity: number,
+) => {
   const intervals: { date: string; start: number; end: number }[] = [];
   let remainingHours = alloc.hours;
   let currentOffset = alloc.offsetHours || 0;
@@ -158,25 +250,34 @@ const getAllocationIntervals = (alloc: Omit<Allocation, 'id'>, capacity: number)
 
 // Валидация наложений по времени и лимита дневной доступности
 export const validateAllocation = (
-  proposedAlloc: Omit<Allocation, 'id'> & { id?: string },
+  proposedAlloc: Omit<Allocation, "id"> & { id?: string },
   allAllocations: Allocation[],
   projects: Project[],
-  designerCapacities: Record<string, number>
-): { valid: boolean; reason?: 'overlap' | 'exceeds_capacity'; overlappingAlloc?: Allocation; overlappingProject?: Project } => {
+  designerCapacities: Record<string, number>,
+): {
+  valid: boolean;
+  reason?: "overlap" | "exceeds_capacity";
+  overlappingAlloc?: Allocation;
+  overlappingProject?: Project;
+} => {
   const capacity = designerCapacities[proposedAlloc.designerId] || 8;
-  
+
   // 1. Проверяем сегменты новой/обновленной аллокации
   const proposedSegments = getAllocationIntervals(proposedAlloc, capacity);
-  
+
   // Убеждаемся, что смогли распределить все часы. Если нет — это превышение доступности
-  const mappedHours = proposedSegments.reduce((sum, s) => sum + (s.end - s.start), 0);
+  const mappedHours = proposedSegments.reduce(
+    (sum, s) => sum + (s.end - s.start),
+    0,
+  );
   if (mappedHours < proposedAlloc.hours) {
-    return { valid: false, reason: 'exceeds_capacity' };
+    return { valid: false, reason: "exceeds_capacity" };
   }
 
   // 2. Проверяем наложение на другие аллокации этого же дизайнера по всем проектам
   const otherAllocations = allAllocations.filter(
-    (a) => a.designerId === proposedAlloc.designerId && a.id !== proposedAlloc.id
+    (a) =>
+      a.designerId === proposedAlloc.designerId && a.id !== proposedAlloc.id,
   );
 
   for (const otherAlloc of otherAllocations) {
@@ -192,7 +293,7 @@ export const validateAllocation = (
             const proj = projects.find((p) => p.id === otherAlloc.projectId);
             return {
               valid: false,
-              reason: 'overlap',
+              reason: "overlap",
               overlappingAlloc: otherAlloc,
               overlappingProject: proj,
             };
@@ -206,86 +307,110 @@ export const validateAllocation = (
 };
 
 // Красивое форматирование времени для украинского интерфейса конфликтов
-const formatAllocationTimeLabel = (alloc: Omit<Allocation, 'id'>, capacity: number): string => {
+const formatAllocationTimeLabel = (
+  alloc: Omit<Allocation, "id">,
+  capacity: number,
+): string => {
   const dateObj = new Date(alloc.startDate);
-  const daysUa = ['Неділя', 'Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота'];
-  const monthsUa = [
-    'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
-    'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
+  const daysUa = [
+    "Неділя",
+    "Понеділок",
+    "Вівторок",
+    "Середа",
+    "Четвер",
+    "Пʼятниця",
+    "Субота",
   ];
-  
+  const monthsUa = [
+    "січня",
+    "лютого",
+    "березня",
+    "квітня",
+    "травня",
+    "червня",
+    "липня",
+    "серпня",
+    "вересня",
+    "жовтня",
+    "листопада",
+    "грудня",
+  ];
+
   const dayName = daysUa[dateObj.getDay()];
   const dayNum = dateObj.getDate();
   const monthName = monthsUa[dateObj.getMonth()];
-  
+
   const formattedDate = `${dayName}, ${dayNum} ${monthName}`;
   const offset = alloc.offsetHours || 0;
   const hours = alloc.hours;
 
-  let timeSlot = '';
+  let timeSlot = "";
   if (hours >= capacity) {
-    timeSlot = 'весь день';
+    timeSlot = "весь день";
   } else if (offset === 0 && hours === capacity / 2) {
-    timeSlot = 'перша половина дня';
+    timeSlot = "перша половина дня";
   } else if (offset === capacity / 2 && hours === capacity / 2) {
-    timeSlot = 'друга половина дня';
+    timeSlot = "друга половина дня";
   } else {
     timeSlot = `з ${offset}-ї по ${offset + hours}-ту годину`;
   }
-  
+
   return `${formattedDate} (${timeSlot}, ${hours} год)`;
 };
 
 export const App: React.FC = () => {
   // --- Admin Authentication State ---
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return sessionStorage.getItem('isAdmin_planner') === 'true';
+    return sessionStorage.getItem("isAdmin_planner") === "true";
   });
 
   const [loginOpened, setLoginOpened] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
+    setLoginError("");
     setIsSubmitting(true);
     const success = await handleLogin(email, password);
     setIsSubmitting(false);
     if (success) {
       setLoginOpened(false);
-      setEmail('');
-      setPassword('');
+      setEmail("");
+      setPassword("");
     } else {
-      setLoginError('Невірний email або пароль');
+      setLoginError("Невірний email або пароль");
     }
   };
 
   const handleLogin = async (email: string, pass: string): Promise<boolean> => {
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password: pass }),
       });
       if (res.ok) {
         const data = await res.json();
         if (data && data.success) {
           setIsAdmin(true);
-          sessionStorage.setItem('isAdmin_planner', 'true');
+          sessionStorage.setItem("isAdmin_planner", "true");
           return true;
         }
       }
     } catch (err) {
-      console.warn('Backend login query failed, trying frontend validation:', err);
+      console.warn(
+        "Backend login query failed, trying frontend validation:",
+        err,
+      );
     }
 
     // Frontend validation fallback
-    if (email === 'radvancor@gmail.com' && pass === '80938093r') {
+    if (email === "radvancor@gmail.com" && pass === "80938093r") {
       setIsAdmin(true);
-      sessionStorage.setItem('isAdmin_planner', 'true');
+      sessionStorage.setItem("isAdmin_planner", "true");
       return true;
     }
     return false;
@@ -293,29 +418,41 @@ export const App: React.FC = () => {
 
   const handleLogout = () => {
     setIsAdmin(false);
-    sessionStorage.removeItem('isAdmin_planner');
+    sessionStorage.removeItem("isAdmin_planner");
   };
 
   // --- Persistent States synced with SQLite ---
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
-  const [designerCapacities, setDesignerCapacities] = useState<Record<string, number>>({});
+  const [designerCapacities, setDesignerCapacities] = useState<
+    Record<string, number>
+  >({});
   const [isSticky, setIsSticky] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // --- Разделы и Канбан-трекер задач ---
-  const [activeSection, setActiveSection] = useState<'allocator' | 'tasks'>('allocator');
+  const [activeSection, setActiveSection] = useState<"allocator" | "tasks">(
+    "allocator",
+  );
   const [columns, setColumns] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [links, setLinks] = useState<any[]>([]);
+  // --- Динамический заголовок страницы ---
+  useEffect(() => {
+    const titleMap = {
+      allocator: "Трекінг",
+      tasks: "Задачі",
+    };
+    document.title = `${titleMap[activeSection]} - Allocater`;
+  }, [activeSection]);
 
   // --- Состояние модального окна конфликтов распределения времени ---
   const [conflictModal, setConflictModal] = useState<{
     opened: boolean;
     designer: User;
-    reason: 'overlap' | 'exceeds_capacity';
+    reason: "overlap" | "exceeds_capacity";
     conflictingProject?: Project;
     proposedDate: string;
     proposedTimeLabel: string;
@@ -323,10 +460,11 @@ export const App: React.FC = () => {
 
   // --- Spaces State ---
   const [spaces, setSpaces] = useState<Space[]>([]);
-  const [activeSpaceId, setActiveSpaceId] = useState<string>('1');
+  const [activeSpaceId, setActiveSpaceId] = useState<string>("1");
   const [manageSpacesOpened, setManageSpacesOpened] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
-  const [deleteProjectModalOpened, setDeleteProjectModalOpened] = useState(false);
+  const [deleteProjectModalOpened, setDeleteProjectModalOpened] =
+    useState(false);
   const [projectHasAllocations, setProjectHasAllocations] = useState(false);
 
   useEffect(() => {
@@ -338,8 +476,8 @@ export const App: React.FC = () => {
         return prev;
       });
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   // --- Calendar Navigation ---
@@ -354,7 +492,7 @@ export const App: React.FC = () => {
   };
 
   const [weekStart, setWeekStart] = useState<Date>(() => {
-    const saved = sessionStorage.getItem('last_week_start');
+    const saved = sessionStorage.getItem("last_week_start");
     if (saved) return new Date(saved);
     return getMonday(new Date());
   });
@@ -374,22 +512,22 @@ export const App: React.FC = () => {
   // Сохранение текущей недели в sessionStorage
   useEffect(() => {
     if (weekStart) {
-      sessionStorage.setItem('last_week_start', weekStart.toISOString());
+      sessionStorage.setItem("last_week_start", weekStart.toISOString());
     }
   }, [weekStart]);
 
   // Fetch initial data from SQLite Express Backend
   useEffect(() => {
     Promise.all([
-      fetch('/api/data').then((res) => res.json()),
-      fetch('/api/tasks/data').then((res) => res.json())
+      fetch("/api/data").then((res) => res.json()),
+      fetch("/api/tasks/data").then((res) => res.json()),
     ])
       .then(([data, tasksData]) => {
         setUsers(data.users || []);
         setProjects(data.projects || []);
         setAllocations(data.allocations || []);
         setDesignerCapacities(data.capacities || {});
-        
+
         const loadedSpaces = data.spaces || [];
         setSpaces(loadedSpaces);
 
@@ -399,11 +537,16 @@ export const App: React.FC = () => {
         setLinks(tasksData.links || []);
 
         // Parse current URL
-        const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+        const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(
+          window.location.pathname,
+        );
         setActiveSection(section);
 
-        let targetSpaceId = '1';
-        if (parsedSpaceId && loadedSpaces.some((s: Space) => s.id === parsedSpaceId)) {
+        let targetSpaceId = "1";
+        if (
+          parsedSpaceId &&
+          loadedSpaces.some((s: Space) => s.id === parsedSpaceId)
+        ) {
           targetSpaceId = parsedSpaceId;
         } else if (loadedSpaces.length > 0) {
           targetSpaceId = loadedSpaces[0].id;
@@ -416,23 +559,25 @@ export const App: React.FC = () => {
         }
 
         // Auto format current path cleanly
-        const targetSpace = loadedSpaces.find((s: Space) => s.id === targetSpaceId) || loadedSpaces[0];
+        const targetSpace =
+          loadedSpaces.find((s: Space) => s.id === targetSpaceId) ||
+          loadedSpaces[0];
         if (targetSpace) {
           const spaceSlug = `${targetSpaceId}-${transliterate(targetSpace.name)}`;
-          let newPath = '';
-          if (section === 'tasks') {
+          let newPath = "";
+          if (section === "tasks") {
             newPath = `/tasks/${spaceSlug}`;
           } else {
-            const start = parsedWeekStart || new Date('2026-07-20T00:00:00');
+            const start = parsedWeekStart || new Date("2026-07-20T00:00:00");
             const weekSlug = getWeekUrlSlug(start);
             newPath = `/allocator/${spaceSlug}/${weekSlug}`;
           }
-          window.history.replaceState(null, '', newPath);
+          window.history.replaceState(null, "", newPath);
         }
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Error fetching data from SQLite API:', err);
+        console.error("Error fetching data from SQLite API:", err);
         setLoading(false);
       });
   }, []);
@@ -444,8 +589,8 @@ export const App: React.FC = () => {
     if (!activeSpace) return;
 
     const spaceSlug = `${activeSpace.id}-${transliterate(activeSpace.name)}`;
-    let newPath = '';
-    if (activeSection === 'tasks') {
+    let newPath = "";
+    if (activeSection === "tasks") {
       newPath = `/tasks/${spaceSlug}`;
     } else {
       const weekSlug = getWeekUrlSlug(weekStart);
@@ -453,14 +598,16 @@ export const App: React.FC = () => {
     }
 
     if (window.location.pathname !== newPath) {
-      window.history.pushState(null, '', newPath);
+      window.history.pushState(null, "", newPath);
     }
   }, [activeSection, activeSpaceId, weekStart, spaces]);
 
   // Sync history state navigation (popstate) back to React states
   useEffect(() => {
     const handlePopState = () => {
-      const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(window.location.pathname);
+      const { section, parsedSpaceId, parsedWeekStart } = parseUrlState(
+        window.location.pathname,
+      );
       setActiveSection(section);
       if (parsedSpaceId && spaces.some((s) => s.id === parsedSpaceId)) {
         setActiveSpaceId(parsedSpaceId);
@@ -469,8 +616,8 @@ export const App: React.FC = () => {
         setWeekStart(parsedWeekStart);
       }
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, [spaces]);
 
   const handlePrevWeek = () => {
@@ -491,13 +638,23 @@ export const App: React.FC = () => {
 
   // Format week month and year in Ukrainian (showing working days Monday-Friday dates)
   const getMonthYearLabel = (daysList: Date[]) => {
-    if (daysList.length < 5) return '';
+    if (daysList.length < 5) return "";
     const monday = daysList[0];
     const friday = daysList[4];
 
     const monthsUaGenitive = [
-      'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
-      'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
+      "січня",
+      "лютого",
+      "березня",
+      "квітня",
+      "травня",
+      "червня",
+      "липня",
+      "серпня",
+      "вересня",
+      "жовтня",
+      "листопада",
+      "грудня",
     ];
 
     const monDay = monday.getDate();
@@ -525,18 +682,22 @@ export const App: React.FC = () => {
   // --- User Management Handlers (SQLite Synced) ---
   const [drawerOpened, setDrawerOpened] = useState(false);
 
-  const handleAddUser = (newUserData: Omit<User, 'id'>) => {
+  const handleAddUser = (newUserData: Omit<User, "id">) => {
     if (!isAdmin) return;
-    const newId = String(users.length > 0 ? Math.max(...users.map((u) => parseInt(u.id) || 0)) + 1 : 1);
+    const newId = String(
+      users.length > 0
+        ? Math.max(...users.map((u) => parseInt(u.id) || 0)) + 1
+        : 1,
+    );
     const newUser: User = { id: newId, ...newUserData };
-    
+
     setUsers((prev) => [...prev, newUser]);
-    
-    fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+
+    fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newUser),
-    }).catch((err) => console.error('Error adding user to SQLite:', err));
+    }).catch((err) => console.error("Error adding user to SQLite:", err));
 
     // Automatically add newly created user to the active space
     if (activeSpaceId) {
@@ -545,30 +706,40 @@ export const App: React.FC = () => {
           if (space.id === activeSpaceId) {
             const updatedMemberIds = [...space.memberIds, newId];
             fetch(`/api/spaces/${activeSpaceId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: space.name, memberIds: updatedMemberIds }),
-            }).catch((err) => console.error('Error adding user to space in backend:', err));
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: space.name,
+                memberIds: updatedMemberIds,
+              }),
+            }).catch((err) =>
+              console.error("Error adding user to space in backend:", err),
+            );
             return { ...space, memberIds: updatedMemberIds };
           }
           return space;
-        })
+        }),
       );
     }
   };
 
   const handleEditUser = (updatedUser: User) => {
     if (!isAdmin) return;
-    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-    
+    setUsers((prev) =>
+      prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+    );
+
     fetch(`/api/users/${updatedUser.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updatedUser),
-    }).catch((err) => console.error('Error updating user in SQLite:', err));
+    }).catch((err) => console.error("Error updating user in SQLite:", err));
 
     // Also if capacity doesn't exist for designer, initialize it
-    if (updatedUser.isDesigner && designerCapacities[updatedUser.id] === undefined) {
+    if (
+      updatedUser.isDesigner &&
+      designerCapacities[updatedUser.id] === undefined
+    ) {
       handleCapacityChange(updatedUser.id, 8);
     }
   };
@@ -581,7 +752,7 @@ export const App: React.FC = () => {
       prev.map((proj) => ({
         ...proj,
         memberIds: proj.memberIds.filter((id) => id !== userId),
-      }))
+      })),
     );
     // Remove their allocations locally
     setAllocations((prev) => prev.filter((a) => a.designerId !== userId));
@@ -590,26 +761,28 @@ export const App: React.FC = () => {
       prev.map((space) => ({
         ...space,
         memberIds: space.memberIds.filter((id) => id !== userId),
-      }))
+      })),
     );
 
     fetch(`/api/users/${userId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting user from SQLite:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting user from SQLite:", err));
   };
 
   // --- Project Row Action Handlers (SQLite Synced) ---
   const handleUpdateProjectName = (projectId: string, newName: string) => {
     if (!isAdmin) return;
     setProjects((prev) =>
-      prev.map((p) => (p.id === projectId ? { ...p, name: newName } : p))
+      prev.map((p) => (p.id === projectId ? { ...p, name: newName } : p)),
     );
-    
+
     fetch(`/api/projects/${projectId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName }),
-    }).catch((err) => console.error('Error updating project name in SQLite:', err));
+    }).catch((err) =>
+      console.error("Error updating project name in SQLite:", err),
+    );
   };
 
   const handleDeleteProject = (projectId: string) => {
@@ -630,8 +803,10 @@ export const App: React.FC = () => {
     setAllocations((prev) => prev.filter((a) => a.projectId !== pid));
 
     fetch(`/api/projects/${pid}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting project from SQLite:', err));
+      method: "DELETE",
+    }).catch((err) =>
+      console.error("Error deleting project from SQLite:", err),
+    );
 
     setDeleteProjectModalOpened(false);
     setProjectToDelete(null);
@@ -641,14 +816,14 @@ export const App: React.FC = () => {
     if (!projectToDelete) return;
     const pid = projectToDelete.id;
     setProjects((prev) =>
-      prev.map((p) => (p.id === pid ? { ...p, isArchived: true } : p))
+      prev.map((p) => (p.id === pid ? { ...p, isArchived: true } : p)),
     );
 
     fetch(`/api/projects/${pid}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isArchived: true }),
-    }).catch((err) => console.error('Error archiving project in SQLite:', err));
+    }).catch((err) => console.error("Error archiving project in SQLite:", err));
 
     setDeleteProjectModalOpened(false);
     setProjectToDelete(null);
@@ -659,14 +834,18 @@ export const App: React.FC = () => {
     setProjects((prev) => {
       return prev.map((p) => {
         if (p.id === projectId) {
-          const newList = p.memberIds.includes(userId) ? p.memberIds : [...p.memberIds, userId];
-          
+          const newList = p.memberIds.includes(userId)
+            ? p.memberIds
+            : [...p.memberIds, userId];
+
           fetch(`/api/projects/${projectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ memberIds: newList }),
-          }).catch((err) => console.error('Error adding project member in SQLite:', err));
-          
+          }).catch((err) =>
+            console.error("Error adding project member in SQLite:", err),
+          );
+
           return { ...p, memberIds: newList };
         }
         return p;
@@ -680,13 +859,15 @@ export const App: React.FC = () => {
       return prev.map((p) => {
         if (p.id === projectId) {
           const newList = p.memberIds.filter((id) => id !== userId);
-          
+
           fetch(`/api/projects/${projectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ memberIds: newList }),
-          }).catch((err) => console.error('Error removing project member in SQLite:', err));
-          
+          }).catch((err) =>
+            console.error("Error removing project member in SQLite:", err),
+          );
+
           return { ...p, memberIds: newList };
         }
         return p;
@@ -695,29 +876,46 @@ export const App: React.FC = () => {
 
     // Also clean their allocations for this project
     setAllocations((prev) => {
-      const toDelete = prev.filter((a) => a.projectId === projectId && a.designerId === userId);
+      const toDelete = prev.filter(
+        (a) => a.projectId === projectId && a.designerId === userId,
+      );
       toDelete.forEach((a) => {
         fetch(`/api/allocations/${a.id}`, {
-          method: 'DELETE',
-        }).catch((err) => console.error('Error deleting allocation on project member remove:', err));
+          method: "DELETE",
+        }).catch((err) =>
+          console.error(
+            "Error deleting allocation on project member remove:",
+            err,
+          ),
+        );
       });
-      return prev.filter((a) => !(a.projectId === projectId && a.designerId === userId));
+      return prev.filter(
+        (a) => !(a.projectId === projectId && a.designerId === userId),
+      );
     });
   };
 
-  const handleReplaceProjectMember = (projectId: string, oldUserId: string, newUserId: string) => {
+  const handleReplaceProjectMember = (
+    projectId: string,
+    oldUserId: string,
+    newUserId: string,
+  ) => {
     if (!isAdmin) return;
     setProjects((prev) => {
       return prev.map((p) => {
         if (p.id === projectId) {
-          const newList = p.memberIds.map((id) => (id === oldUserId ? newUserId : id));
-          
+          const newList = p.memberIds.map((id) =>
+            id === oldUserId ? newUserId : id,
+          );
+
           fetch(`/api/projects/${projectId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ memberIds: newList }),
-          }).catch((err) => console.error('Error replacing project member in SQLite:', err));
-          
+          }).catch((err) =>
+            console.error("Error replacing project member in SQLite:", err),
+          );
+
           return { ...p, memberIds: newList };
         }
         return p;
@@ -728,14 +926,21 @@ export const App: React.FC = () => {
     setAllocations((prev) => {
       return prev.map((a) => {
         if (a.projectId === projectId && a.designerId === oldUserId) {
-          const targetDesignerId = newUser?.isDesigner ? newUserId : a.designerId;
-          
+          const targetDesignerId = newUser?.isDesigner
+            ? newUserId
+            : a.designerId;
+
           fetch(`/api/allocations/${a.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ designerId: targetDesignerId }),
-          }).catch((err) => console.error('Error updating allocation member replacement in SQLite:', err));
-          
+          }).catch((err) =>
+            console.error(
+              "Error updating allocation member replacement in SQLite:",
+              err,
+            ),
+          );
+
           return { ...a, designerId: targetDesignerId };
         }
         return a;
@@ -745,18 +950,23 @@ export const App: React.FC = () => {
 
   const handleUpdateProjectsList = (newList: Project[]) => {
     setProjects((prev) => {
-      const otherSpacesProjects = prev.filter((p) => p.spaceId !== activeSpaceId);
-      const updatedList = newList.map(p => ({ ...p, spaceId: p.spaceId || activeSpaceId }));
+      const otherSpacesProjects = prev.filter(
+        (p) => p.spaceId !== activeSpaceId,
+      );
+      const updatedList = newList.map((p) => ({
+        ...p,
+        spaceId: p.spaceId || activeSpaceId,
+      }));
       return [...otherSpacesProjects, ...updatedList];
     });
   };
 
   const handleSaveProjectsOrder = (orderedIds: string[]) => {
-    fetch('/api/projects/order', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/projects/order", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: orderedIds }),
-    }).catch((err) => console.error('Error saving projects order:', err));
+    }).catch((err) => console.error("Error saving projects order:", err));
   };
 
   // --- Spaces CRUD Handlers ---
@@ -766,59 +976,74 @@ export const App: React.FC = () => {
     const newSpace: Space = { id: newId, ...newSpaceData };
     setSpaces((prev) => [...prev, newSpace]);
 
-    fetch('/api/spaces', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/spaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newSpace),
-    }).catch((err) => console.error('Error adding space in SQLite:', err));
+    }).catch((err) => console.error("Error adding space in SQLite:", err));
   };
 
   const handleEditSpace = (updatedSpace: Space) => {
     if (!isAdmin) return;
-    setSpaces((prev) => prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s)));
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === updatedSpace.id ? updatedSpace : s)),
+    );
 
     fetch(`/api/spaces/${updatedSpace.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updatedSpace),
-    }).catch((err) => console.error('Error updating space in SQLite:', err));
+    }).catch((err) => console.error("Error updating space in SQLite:", err));
   };
 
   const handleDeleteSpace = (spaceId: string) => {
     if (!isAdmin) return;
     setSpaces((prev) => prev.filter((s) => s.id !== spaceId));
-    
+
     // Clean up projects and allocations locally
     setProjects((prev) => prev.filter((p) => p.spaceId !== spaceId));
-    setAllocations((prev) => prev.filter((a) => !projects.some((p) => p.id === a.projectId && p.spaceId === spaceId)));
-    
+    setAllocations((prev) =>
+      prev.filter(
+        (a) =>
+          !projects.some((p) => p.id === a.projectId && p.spaceId === spaceId),
+      ),
+    );
+
     fetch(`/api/spaces/${spaceId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting space in SQLite:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting space in SQLite:", err));
 
     if (activeSpaceId === spaceId) {
-      setActiveSpaceId('1');
+      setActiveSpaceId("1");
     }
   };
 
   // --- Allocations Event Handlers (SQLite Synced) ---
-  const handleAddAllocation = (allocData: Omit<Allocation, 'id'>) => {
+  const handleAddAllocation = (allocData: Omit<Allocation, "id">) => {
     if (!isAdmin) return;
     const newId = `alloc-${Date.now()}`;
     const newAlloc: Allocation = { id: newId, ...allocData };
 
     // Валидация новой аллокации
-    const validation = validateAllocation(newAlloc, allocations, projects, designerCapacities);
+    const validation = validateAllocation(
+      newAlloc,
+      allocations,
+      projects,
+      designerCapacities,
+    );
     if (!validation.valid) {
       const designer = users.find((u) => u.id === newAlloc.designerId);
       if (designer) {
         setConflictModal({
           opened: true,
           designer,
-          reason: validation.reason || 'overlap',
+          reason: validation.reason || "overlap",
           conflictingProject: validation.overlappingProject,
           proposedDate: newAlloc.startDate,
-          proposedTimeLabel: formatAllocationTimeLabel(newAlloc, designerCapacities[newAlloc.designerId] || 8),
+          proposedTimeLabel: formatAllocationTimeLabel(
+            newAlloc,
+            designerCapacities[newAlloc.designerId] || 8,
+          ),
         });
       }
       return;
@@ -826,18 +1051,18 @@ export const App: React.FC = () => {
 
     setAllocations((prev) => [...prev, newAlloc]);
 
-    fetch('/api/allocations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/allocations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newAlloc),
-    }).catch((err) => console.error('Error adding allocation in SQLite:', err));
+    }).catch((err) => console.error("Error adding allocation in SQLite:", err));
   };
 
   const handleUpdateAllocation = (
     id: string,
     updated: Partial<Allocation>,
     commit = true,
-    revertValues?: Partial<Allocation>
+    revertValues?: Partial<Allocation>,
   ) => {
     if (!isAdmin) return;
 
@@ -847,24 +1072,32 @@ export const App: React.FC = () => {
       const proposed = { ...currentAlloc, ...updated };
 
       // Валидация предлагаемых изменений
-      const validation = validateAllocation(proposed, allocations, projects, designerCapacities);
+      const validation = validateAllocation(
+        proposed,
+        allocations,
+        projects,
+        designerCapacities,
+      );
       if (!validation.valid) {
         const designer = users.find((u) => u.id === proposed.designerId);
         if (designer) {
           setConflictModal({
             opened: true,
             designer,
-            reason: validation.reason || 'overlap',
+            reason: validation.reason || "overlap",
             conflictingProject: validation.overlappingProject,
             proposedDate: proposed.startDate,
-            proposedTimeLabel: formatAllocationTimeLabel(proposed, designerCapacities[proposed.designerId] || 8),
+            proposedTimeLabel: formatAllocationTimeLabel(
+              proposed,
+              designerCapacities[proposed.designerId] || 8,
+            ),
           });
         }
-        
+
         // Откатываем локальное состояние к исходному, если предоставлено revertValues
         if (revertValues) {
           setAllocations((prev) =>
-            prev.map((a) => (a.id === id ? { ...a, ...revertValues } : a))
+            prev.map((a) => (a.id === id ? { ...a, ...revertValues } : a)),
           );
         } else {
           // Если нет revertValues, форсируем обновление состояния для ререндера
@@ -875,15 +1108,17 @@ export const App: React.FC = () => {
     }
 
     setAllocations((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...updated } : a))
+      prev.map((a) => (a.id === id ? { ...a, ...updated } : a)),
     );
 
     if (commit) {
       fetch(`/api/allocations/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
-      }).catch((err) => console.error('Error updating allocation in SQLite:', err));
+      }).catch((err) =>
+        console.error("Error updating allocation in SQLite:", err),
+      );
     }
   };
 
@@ -892,8 +1127,10 @@ export const App: React.FC = () => {
     setAllocations((prev) => prev.filter((a) => a.id !== id));
 
     fetch(`/api/allocations/${id}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting allocation from SQLite:', err));
+      method: "DELETE",
+    }).catch((err) =>
+      console.error("Error deleting allocation from SQLite:", err),
+    );
   };
 
   // --- Capacity Change Handler (SQLite Synced) ---
@@ -905,14 +1142,21 @@ export const App: React.FC = () => {
     }));
 
     fetch(`/api/capacities/${designerId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dailyCapacity }),
-    }).catch((err) => console.error('Error updating designer capacity in SQLite:', err));
+    }).catch((err) =>
+      console.error("Error updating designer capacity in SQLite:", err),
+    );
   };
 
   // --- Add Project Handler (SQLite Synced with unarchive/existing support) ---
-  const handleAddProject = (name: string, color: string, memberIds: string[], existingProjectId?: string) => {
+  const handleAddProject = (
+    name: string,
+    color: string,
+    memberIds: string[],
+    existingProjectId?: string,
+  ) => {
     if (!isAdmin) return;
 
     if (existingProjectId) {
@@ -920,73 +1164,112 @@ export const App: React.FC = () => {
       setProjects((prev) =>
         prev.map((p) =>
           p.id === existingProjectId
-            ? { ...p, isArchived: false, name: name.trim() || p.name, color: color || p.color, memberIds }
-            : p
-        )
+            ? {
+                ...p,
+                isArchived: false,
+                name: name.trim() || p.name,
+                color: color || p.color,
+                memberIds,
+              }
+            : p,
+        ),
       );
 
       fetch(`/api/projects/${existingProjectId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isArchived: false, name: name.trim(), color, memberIds }),
-      }).catch((err) => console.error('Error updating project in SQLite:', err));
-      
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isArchived: false,
+          name: name.trim(),
+          color,
+          memberIds,
+        }),
+      }).catch((err) =>
+        console.error("Error updating project in SQLite:", err),
+      );
+
       return;
     }
 
     // Проверяем, не существует ли уже проект с таким именем в текущем пространстве
     const existing = projects.find(
-      (p) => p.name.toLowerCase() === name.toLowerCase() && p.spaceId === activeSpaceId
+      (p) =>
+        p.name.toLowerCase() === name.toLowerCase() &&
+        p.spaceId === activeSpaceId,
     );
     if (existing) {
       // Просто разархивируем его
       setProjects((prev) =>
-        prev.map((p) => (p.id === existing.id ? { ...p, isArchived: false, color: color || p.color, memberIds } : p))
+        prev.map((p) =>
+          p.id === existing.id
+            ? { ...p, isArchived: false, color: color || p.color, memberIds }
+            : p,
+        ),
       );
       fetch(`/api/projects/${existing.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isArchived: false, color, memberIds }),
-      }).catch((err) => console.error('Error unarchiving project in SQLite:', err));
+      }).catch((err) =>
+        console.error("Error unarchiving project in SQLite:", err),
+      );
       return;
     }
 
     // Создаем полностью новый проект
     const newId = `p-${Date.now()}`;
-    const newProj: Project = { id: newId, name, color, memberIds, spaceId: activeSpaceId, isArchived: false };
+    const newProj: Project = {
+      id: newId,
+      name,
+      color,
+      memberIds,
+      spaceId: activeSpaceId,
+      isArchived: false,
+    };
     setProjects((prev) => [...prev, newProj]);
 
-    fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newProj),
-    }).catch((err) => console.error('Error adding project in SQLite:', err));
+    }).catch((err) => console.error("Error adding project in SQLite:", err));
   };
 
   // --- Tasks Handlers ---
   const handleAddColumn = (name: string, isDone: boolean) => {
     if (!isAdmin) return;
     const colId = `col-${Date.now()}`;
-    const sortOrder = columns.filter(c => c.spaceId === activeSpaceId).length;
-    const newCol = { id: colId, name, spaceId: activeSpaceId, sortOrder, isDone };
+    const sortOrder = columns.filter((c) => c.spaceId === activeSpaceId).length;
+    const newCol = {
+      id: colId,
+      name,
+      spaceId: activeSpaceId,
+      sortOrder,
+      isDone,
+    };
     setColumns((prev) => [...prev, newCol]);
 
-    fetch('/api/task-columns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/task-columns", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newCol),
-    }).catch((err) => console.error('Error adding task column:', err));
+    }).catch((err) => console.error("Error adding task column:", err));
   };
 
-  const handleUpdateColumn = (colId: string, updated: { name?: string; isDone?: boolean; sortOrder?: number }) => {
+  const handleUpdateColumn = (
+    colId: string,
+    updated: { name?: string; isDone?: boolean; sortOrder?: number },
+  ) => {
     if (!isAdmin) return;
-    setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, ...updated } : c)));
+    setColumns((prev) =>
+      prev.map((c) => (c.id === colId ? { ...c, ...updated } : c)),
+    );
 
     fetch(`/api/task-columns/${colId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updated),
-    }).catch((err) => console.error('Error updating task column:', err));
+    }).catch((err) => console.error("Error updating task column:", err));
   };
 
   const handleDeleteColumn = (colId: string) => {
@@ -995,13 +1278,21 @@ export const App: React.FC = () => {
     setTasks((prev) => prev.filter((t) => t.columnId !== colId));
 
     fetch(`/api/task-columns/${colId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting task column:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting task column:", err));
   };
 
-  const handleAddCard = (cardData: { title: string; description: string; projectId: string; designerId: string | null; columnId: string }) => {
+  const handleAddCard = (cardData: {
+    title: string;
+    description: string;
+    projectId: string;
+    designerId: string | null;
+    columnId: string;
+  }) => {
     const cardId = `task-${Date.now()}`;
-    const sortOrder = tasks.filter(t => t.columnId === cardData.columnId).length;
+    const sortOrder = tasks.filter(
+      (t) => t.columnId === cardData.columnId,
+    ).length;
     const newCard = {
       id: cardId,
       ...cardData,
@@ -1010,21 +1301,33 @@ export const App: React.FC = () => {
     };
     setTasks((prev) => [...prev, newCard]);
 
-    fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newCard),
-    }).catch((err) => console.error('Error adding task:', err));
+    }).catch((err) => console.error("Error adding task:", err));
   };
 
-  const handleUpdateCard = (cardId: string, updated: { title?: string; description?: string; projectId?: string; designerId?: string | null; columnId?: string; sortOrder?: number }) => {
-    setTasks((prev) => prev.map((t) => (t.id === cardId ? { ...t, ...updated } : t)));
+  const handleUpdateCard = (
+    cardId: string,
+    updated: {
+      title?: string;
+      description?: string;
+      projectId?: string;
+      designerId?: string | null;
+      columnId?: string;
+      sortOrder?: number;
+    },
+  ) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === cardId ? { ...t, ...updated } : t)),
+    );
 
     fetch(`/api/tasks/${cardId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updated),
-    }).catch((err) => console.error('Error updating task:', err));
+    }).catch((err) => console.error("Error updating task:", err));
   };
 
   const handleDeleteCard = (cardId: string) => {
@@ -1033,54 +1336,62 @@ export const App: React.FC = () => {
     setLinks((prev) => prev.filter((l) => l.taskId !== cardId));
 
     fetch(`/api/tasks/${cardId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting task:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting task:", err));
   };
 
-  const handleAddAttachment = (taskId: string, fileName: string, fileUrl: string) => {
+  const handleAddAttachment = (
+    taskId: string,
+    fileName: string,
+    fileUrl: string,
+  ) => {
     fetch(`/api/tasks/${taskId}/attachments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileName, fileUrl }),
     })
       .then((res) => res.json())
       .then((newAttach) => {
         setAttachments((prev) => [...prev, newAttach]);
       })
-      .catch((err) => console.error('Error adding attachment:', err));
+      .catch((err) => console.error("Error adding attachment:", err));
   };
 
   const handleDeleteAttachment = (attachId: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== attachId));
     fetch(`/api/attachments/${attachId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting attachment:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting attachment:", err));
   };
 
   const handleAddLink = (taskId: string, url: string, title: string) => {
     fetch(`/api/tasks/${taskId}/links`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, title }),
     })
       .then((res) => res.json())
       .then((newLink) => {
         setLinks((prev) => [...prev, newLink]);
       })
-      .catch((err) => console.error('Error adding link:', err));
+      .catch((err) => console.error("Error adding link:", err));
   };
 
   const handleDeleteLink = (linkId: string) => {
     setLinks((prev) => prev.filter((l) => l.id !== linkId));
     fetch(`/api/links/${linkId}`, {
-      method: 'DELETE',
-    }).catch((err) => console.error('Error deleting link:', err));
+      method: "DELETE",
+    }).catch((err) => console.error("Error deleting link:", err));
   };
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
-  const spaceUsers = users.filter((u) => activeSpace?.memberIds.includes(u.id)).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+  const spaceUsers = users
+    .filter((u) => activeSpace?.memberIds.includes(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "uk"));
   const spaceProjects = projects.filter((p) => p.spaceId === activeSpaceId);
-  const spaceAllocations = allocations.filter((a) => spaceProjects.some((p) => p.id === a.projectId));
+  const spaceAllocations = allocations.filter((a) =>
+    spaceProjects.some((p) => p.id === a.projectId),
+  );
 
   return (
     <MantineProvider theme={theme}>
@@ -1093,21 +1404,41 @@ export const App: React.FC = () => {
             radius="lg"
             className="glass-panel"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#ffffff',
-              boxShadow: 'var(--shadow-sm)'
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: "#ffffff",
+              boxShadow: "var(--shadow-sm)",
             }}
           >
             <Group gap="md">
               <Group gap="xs">
-                <Avatar size="sm" color="indigo" radius="md">
-                  <IconNotebook size={16} />
-                </Avatar>
+                <Avatar
+                  size="sm"
+                  radius="md"
+                  src="/logo.svg"
+                  style={{ backgroundColor: "transparent" }}
+                />
                 <div>
-                  <Text fw={800} size="sm" style={{ lineHeight: 1.1, letterSpacing: '-0.3px', fontFamily: 'var(--font-family)' }}>Allocater</Text>
-                  <Text size="8px" c="dimmed" fw={600} style={{ fontFamily: 'var(--font-family)' }}>TIME & TASK TRACKER</Text>
+                  <Text
+                    fw={800}
+                    size="sm"
+                    style={{
+                      lineHeight: 1.1,
+                      letterSpacing: "-0.3px",
+                      fontFamily: "var(--font-family)",
+                    }}
+                  >
+                    Allocater
+                  </Text>
+                  <Text
+                    size="8px"
+                    c="dimmed"
+                    fw={600}
+                    style={{ fontFamily: "var(--font-family)" }}
+                  >
+                    TIME & TASK TRACKER
+                  </Text>
                 </div>
               </Group>
 
@@ -1115,10 +1446,12 @@ export const App: React.FC = () => {
 
               <SegmentedControl
                 value={activeSection}
-                onChange={(val) => setActiveSection(val as 'allocator' | 'tasks')}
+                onChange={(val) =>
+                  setActiveSection(val as "allocator" | "tasks")
+                }
                 data={[
-                  { label: 'Аллокатор', value: 'allocator' },
-                  { label: 'Задачи', value: 'tasks' }
+                  { label: "Аллокатор", value: "allocator" },
+                  { label: "Задачи", value: "tasks" },
                 ]}
                 color="indigo"
                 radius="md"
@@ -1130,11 +1463,13 @@ export const App: React.FC = () => {
               <Select
                 value={activeSpaceId}
                 onChange={(val) => val && setActiveSpaceId(val)}
-                data={spaces.map(s => ({ value: s.id, label: s.name }))}
+                data={spaces.map((s) => ({ value: s.id, label: s.name }))}
                 radius="md"
                 size="xs"
-                style={{ width: '160px' }}
-                leftSection={<IconFolder size={14} color="var(--primary-color)" />}
+                style={{ width: "160px" }}
+                leftSection={
+                  <IconFolder size={14} color="var(--primary-color)" />
+                }
               />
 
               <Button
@@ -1186,23 +1521,24 @@ export const App: React.FC = () => {
           </Paper>
 
           {/* Compact Sticky Header (Fixed overlay shown only when scrolled down) - Only for Allocator section */}
-          {isSticky && activeSection === 'allocator' && (
-            <div 
+          {isSticky && activeSection === "allocator" && (
+            <div
               className="glass-panel sticky-header"
               style={{
-                position: 'fixed',
-                top: '12px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 'calc(100% - 48px)',
-                maxWidth: '1552px',
+                position: "fixed",
+                top: "12px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "calc(100% - 48px)",
+                maxWidth: "1552px",
                 zIndex: 90,
-                padding: '12px 20px',
-                boxShadow: '0 10px 30px -10px rgba(0, 0, 0, 0.08)',
-                background: 'rgba(255, 255, 255, 0.85)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(99, 102, 241, 0.15)',
-                animation: 'stickySlideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                padding: "12px 20px",
+                boxShadow: "0 10px 30px -10px rgba(0, 0, 0, 0.08)",
+                background: "rgba(255, 255, 255, 0.85)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(99, 102, 241, 0.15)",
+                animation:
+                  "stickySlideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards",
               }}
             >
               <DesignerHeader
@@ -1228,7 +1564,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Render based on active section */}
-          {activeSection === 'allocator' ? (
+          {activeSection === "allocator" ? (
             <>
               {/* Normal Dashboard Header (Always static in the document flow) */}
               <div className="glass-panel">
@@ -1278,7 +1614,11 @@ export const App: React.FC = () => {
 
               {/* Add Project Bar - Hidden if not Admin */}
               {isAdmin && (
-                <AddProjectRow users={spaceUsers} projects={spaceProjects} onAddProject={handleAddProject} />
+                <AddProjectRow
+                  users={spaceUsers}
+                  projects={spaceProjects}
+                  onAddProject={handleAddProject}
+                />
               )}
             </>
           ) : (
@@ -1348,19 +1688,27 @@ export const App: React.FC = () => {
               {projectHasAllocations ? (
                 <>
                   <Text size="sm" style={{ lineHeight: 1.5 }}>
-                    Проєкт <strong>{projectToDelete.name}</strong> містить зафіксовані години в історії. Як ви хочете його видалити?
+                    Проєкт <strong>{projectToDelete.name}</strong> містить
+                    зафіксовані години в історії. Як ви хочете його видалити?
                   </Text>
                   <Group justify="flex-end" mt="md" gap="xs">
-                    <Button variant="subtle" color="gray" onClick={() => {
-                      setDeleteProjectModalOpened(false);
-                      setProjectToDelete(null);
-                    }}>
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setDeleteProjectModalOpened(false);
+                        setProjectToDelete(null);
+                      }}
+                    >
                       Скасувати
                     </Button>
                     <Button color="indigo" onClick={confirmArchiveProject}>
                       Видалити з пустих тижнів
                     </Button>
-                    <Button color="red" onClick={confirmDeleteProjectCompletely}>
+                    <Button
+                      color="red"
+                      onClick={confirmDeleteProjectCompletely}
+                    >
                       Видалити повністю
                     </Button>
                   </Group>
@@ -1368,16 +1716,24 @@ export const App: React.FC = () => {
               ) : (
                 <>
                   <Text size="sm">
-                    Ви впевнені, що хочете видалити проєкт <strong>{projectToDelete.name}</strong>?
+                    Ви впевнені, що хочете видалити проєкт{" "}
+                    <strong>{projectToDelete.name}</strong>?
                   </Text>
                   <Group justify="flex-end" mt="md">
-                    <Button variant="subtle" color="gray" onClick={() => {
-                      setDeleteProjectModalOpened(false);
-                      setProjectToDelete(null);
-                    }}>
+                    <Button
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => {
+                        setDeleteProjectModalOpened(false);
+                        setProjectToDelete(null);
+                      }}
+                    >
                       Скасувати
                     </Button>
-                    <Button color="red" onClick={confirmDeleteProjectCompletely}>
+                    <Button
+                      color="red"
+                      onClick={confirmDeleteProjectCompletely}
+                    >
                       Видалити
                     </Button>
                   </Group>
@@ -1391,7 +1747,18 @@ export const App: React.FC = () => {
         <Modal
           opened={!!conflictModal?.opened}
           onClose={() => setConflictModal(null)}
-          title={<span style={{ fontWeight: 800, fontSize: '16px', color: '#e03131', fontFamily: 'var(--font-family)' }}>Увага: Конфлікт розподілу часу</span>}
+          title={
+            <span
+              style={{
+                fontWeight: 800,
+                fontSize: "16px",
+                color: "#e03131",
+                fontFamily: "var(--font-family)",
+              }}
+            >
+              Увага: Конфлікт розподілу часу
+            </span>
+          }
           centered
           radius="md"
           size="md"
@@ -1399,9 +1766,21 @@ export const App: React.FC = () => {
         >
           {conflictModal && (
             <Stack gap="md">
-              <Group gap="sm" style={{ padding: '12px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #ffe3e3' }}>
+              <Group
+                gap="sm"
+                style={{
+                  padding: "12px",
+                  backgroundColor: "#fff5f5",
+                  borderRadius: "8px",
+                  border: "1px solid #ffe3e3",
+                }}
+              >
                 {(() => {
-                  const isBase64 = conflictModal.designer.avatar && (conflictModal.designer.avatar.startsWith('data:image/') || conflictModal.designer.avatar.startsWith('http') || conflictModal.designer.avatar.startsWith('/'));
+                  const isBase64 =
+                    conflictModal.designer.avatar &&
+                    (conflictModal.designer.avatar.startsWith("data:image/") ||
+                      conflictModal.designer.avatar.startsWith("http") ||
+                      conflictModal.designer.avatar.startsWith("/"));
                   return (
                     <Avatar
                       size="md"
@@ -1414,25 +1793,50 @@ export const App: React.FC = () => {
                   );
                 })()}
                 <div>
-                  <Text fw={700} size="sm" style={{ fontFamily: 'var(--font-family)' }}>{conflictModal.designer.name}</Text>
-                  <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--font-family)' }}>{conflictModal.designer.role}</Text>
+                  <Text
+                    fw={700}
+                    size="sm"
+                    style={{ fontFamily: "var(--font-family)" }}
+                  >
+                    {conflictModal.designer.name}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ fontFamily: "var(--font-family)" }}
+                  >
+                    {conflictModal.designer.role}
+                  </Text>
                 </div>
               </Group>
 
-              {conflictModal.reason === 'overlap' ? (
-                <Text size="sm" style={{ lineHeight: 1.6, fontFamily: 'var(--font-family)' }}>
-                  Цей час уже зарезервовано на іншому проєкті:{' '}
-                  <strong style={{ color: '#4c6ef5' }}>
+              {conflictModal.reason === "overlap" ? (
+                <Text
+                  size="sm"
+                  style={{ lineHeight: 1.6, fontFamily: "var(--font-family)" }}
+                >
+                  Цей час уже зарезервовано на іншому проєкті:{" "}
+                  <strong style={{ color: "#4c6ef5" }}>
                     {conflictModal.conflictingProject?.name}
-                  </strong>.
+                  </strong>
+                  .
                   <br />
-                  <span style={{ color: 'var(--text-muted)' }}>Заплановано: {conflictModal.proposedTimeLabel}</span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    Заплановано: {conflictModal.proposedTimeLabel}
+                  </span>
                 </Text>
               ) : (
-                <Text size="sm" style={{ lineHeight: 1.6, fontFamily: 'var(--font-family)' }}>
-                  Заплановані години перевищують денну доступність цього дизайнера ({designerCapacities[conflictModal.designer.id] || 8} год).
+                <Text
+                  size="sm"
+                  style={{ lineHeight: 1.6, fontFamily: "var(--font-family)" }}
+                >
+                  Заплановані години перевищують денну доступність цього
+                  дизайнера (
+                  {designerCapacities[conflictModal.designer.id] || 8} год).
                   <br />
-                  <span style={{ color: 'var(--text-muted)' }}>Спробуйте зменшити години або змінити зміщення.</span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    Спробуйте зменшити години або змінити зміщення.
+                  </span>
                 </Text>
               )}
 
@@ -1450,14 +1854,18 @@ export const App: React.FC = () => {
           opened={loginOpened}
           onClose={() => {
             setLoginOpened(false);
-            setLoginError('');
-            setEmail('');
-            setPassword('');
+            setLoginError("");
+            setEmail("");
+            setPassword("");
           }}
           title={
             <Group gap="xs">
               <IconShield size={20} color="var(--primary-color)" />
-              <Text fw={800} size="md" style={{ fontFamily: 'var(--font-family)' }}>
+              <Text
+                fw={800}
+                size="md"
+                style={{ fontFamily: "var(--font-family)" }}
+              >
                 Авторизація адміністратора
               </Text>
             </Group>
