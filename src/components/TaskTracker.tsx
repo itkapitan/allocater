@@ -28,7 +28,8 @@ import {
   Badge,
   Divider,
   ColorInput,
-  Textarea
+  Textarea,
+  Skeleton
 } from '@mantine/core';
 import {
   IconPlus,
@@ -63,6 +64,7 @@ interface TaskTrackerProps {
   onAddLink: (taskId: string, url: string, title: string) => void;
   onDeleteLink: (linkId: string) => void;
   onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
+  loading?: boolean;
 }
 
 export const resolveProjectColor = (color: string | undefined): string => {
@@ -99,7 +101,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   onDeleteAttachment: _onDeleteAttachment,
   onAddLink: _onAddLink,
   onDeleteLink: _onDeleteLink,
-  onAddProject
+  onAddProject,
+  loading = false
 }) => {
   // Filter columns and tasks for active space
   const spaceColumns = columns
@@ -940,7 +943,56 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                 alignItems: 'flex-start'
               }}
             >
-              {spaceColumns.map((col, index) => {
+              {loading ? (
+                Array.from({ length: 3 }).map((_, colIdx) => (
+                  <Paper
+                    key={colIdx}
+                    withBorder
+                    className="glass-panel"
+                    style={{
+                      width: '320px',
+                      flexShrink: 0,
+                      backgroundColor: '#f8fafc',
+                      padding: '16px',
+                      borderRadius: '16px',
+                      boxShadow: 'var(--shadow-sm)'
+                    }}
+                  >
+                    {/* Header Skeleton */}
+                    <Group justify="space-between" mb="md" wrap="nowrap">
+                      <Skeleton height={20} width="50%" radius="sm" animate />
+                      <Skeleton height={16} width="10%" radius="sm" animate />
+                    </Group>
+
+                    {/* Cards Skeleton */}
+                    <Stack gap="sm">
+                      {Array.from({ length: 3 }).map((_, cardIdx) => (
+                        <Paper
+                          key={cardIdx}
+                          withBorder
+                          p="md"
+                          radius="md"
+                          style={{
+                            backgroundColor: '#ffffff',
+                            border: '1px solid var(--border-color)'
+                          }}
+                        >
+                          <Stack gap="xs">
+                            <Skeleton height={14} width="35%" radius="sm" animate />
+                            <Skeleton height={18} width="85%" radius="sm" animate />
+                            <Group justify="space-between" mt="xs">
+                              <Skeleton height={16} circle radius="sm" animate />
+                              <Skeleton height={12} width="25%" radius="sm" animate />
+                            </Group>
+                          </Stack>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </Paper>
+                ))
+              ) : (
+                <>
+                  {spaceColumns.map((col, index) => {
                 const colTasks = spaceTasks
                   .filter((t) => t.columnId === col.id)
                   .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -1146,8 +1198,10 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                     )}
                   </Draggable>
                 );
-              })}
-              {provided.placeholder}
+                  })}
+                  {provided.placeholder}
+                </>
+              )}
 
               {/* Add Column Button */}
               {isAdmin && (

@@ -433,7 +433,12 @@ export const App: React.FC = () => {
 
   // --- Разделы и Канбан-трекер задач ---
   const [activeSection, setActiveSection] = useState<"allocator" | "tasks">(
-    "allocator",
+    () => {
+      if (typeof window !== "undefined") {
+        return parseUrlState(window.location.pathname).section;
+      }
+      return "allocator";
+    }
   );
   const [columns, setColumns] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -460,7 +465,12 @@ export const App: React.FC = () => {
 
   // --- Spaces State ---
   const [spaces, setSpaces] = useState<Space[]>([]);
-  const [activeSpaceId, setActiveSpaceId] = useState<string>("1");
+  const [activeSpaceId, setActiveSpaceId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return parseUrlState(window.location.pathname).parsedSpaceId || "1";
+    }
+    return "1";
+  });
   const [manageSpacesOpened, setManageSpacesOpened] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [deleteProjectModalOpened, setDeleteProjectModalOpened] =
@@ -492,6 +502,10 @@ export const App: React.FC = () => {
   };
 
   const [weekStart, setWeekStart] = useState<Date>(() => {
+    if (typeof window !== "undefined") {
+      const parsed = parseUrlState(window.location.pathname);
+      if (parsed.parsedWeekStart) return parsed.parsedWeekStart;
+    }
     const saved = sessionStorage.getItem("last_week_start");
     if (saved) return new Date(saved);
     return getMonday(new Date());
@@ -1644,6 +1658,7 @@ export const App: React.FC = () => {
               onDeleteLink={handleDeleteLink}
               onAddProject={handleAddProject}
               weekDays={weekDays}
+              loading={loading}
             />
           )}
         </Stack>
