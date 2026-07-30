@@ -808,14 +808,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                   position: 'absolute',
                                   bottom: '16px',
                                   left: `calc(${progressPercent}% - 14px)`,
-                                  backgroundColor: 'var(--primary-color)',
+                                  backgroundColor: progressPercent === 100 ? '#00bc7c' : 'var(--primary-color)',
                                   color: '#ffffff',
                                   padding: '1px 5px',
                                   borderRadius: '6px',
                                   fontSize: '8px',
                                   fontWeight: 800,
                                   whiteSpace: 'nowrap',
-                                  boxShadow: '0 2px 4px rgba(99, 102, 241, 0.25)',
+                                  boxShadow: progressPercent === 100 ? '0 2px 4px rgba(0, 188, 124, 0.25)' : '0 2px 4px rgba(99, 102, 241, 0.25)',
                                   transition: 'left 0.3s ease',
                                   zIndex: 5
                                 } as React.CSSProperties}
@@ -830,14 +830,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     height: 0,
                                     borderStyle: 'solid',
                                     borderWidth: '2px 2px 0 2px',
-                                    borderColor: 'var(--primary-color) transparent transparent transparent'
+                                    borderColor: (progressPercent === 100 ? '#00bc7c' : 'var(--primary-color)') + ' transparent transparent transparent'
                                   }}
                                 />
                               </div>
 
                               <Progress
                                 value={progressPercent}
-                                color="indigo"
+                                color={progressPercent === 100 ? 'teal' : 'indigo'}
                                 size="xs"
                                 radius="xl"
                                 style={{
@@ -856,8 +856,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                   height: '6px',
                                   borderRadius: '50%',
                                   backgroundColor: '#ffffff',
-                                  border: '2px solid var(--primary-color)',
-                                  boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.2)',
+                                  border: progressPercent === 100 ? '2px solid #00bc7c' : '2px solid var(--primary-color)',
+                                  boxShadow: progressPercent === 100 ? '0 0 0 1px rgba(0, 188, 124, 0.2)' : '0 0 0 1px rgba(99, 102, 241, 0.2)',
                                   transition: 'left 0.3s ease',
                                   zIndex: 4
                                 }}

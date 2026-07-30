@@ -164,8 +164,15 @@ async function initializeDb() {
     await executeQuery(`CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY,
       name TEXT,
-      memberIds TEXT
+      memberIds TEXT,
+      autoTransferIncomplete INTEGER DEFAULT 0
     )`);
+
+    try {
+      await executeQuery(`ALTER TABLE spaces ADD COLUMN autoTransferIncomplete INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
 
     await executeQuery(`CREATE TABLE IF NOT EXISTS task_columns (
       id TEXT PRIMARY KEY,
@@ -183,8 +190,18 @@ async function initializeDb() {
       designerId TEXT,
       columnId TEXT,
       sortOrder INTEGER,
-      createdAt TEXT
+      createdAt TEXT,
+      weekStart TEXT
     )`);
+
+    try {
+      await executeQuery(`ALTER TABLE tasks ADD COLUMN weekStart TEXT`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
+
+    // Миграция старых задач для проставления дефолтной недели текущего спринта
+    await executeQuery(`UPDATE tasks SET weekStart = '2026-07-27' WHERE weekStart IS NULL OR weekStart = ''`);
 
     await executeQuery(`CREATE TABLE IF NOT EXISTS task_attachments (
       id TEXT PRIMARY KEY,
@@ -773,11 +790,11 @@ app.post('/api/projects', async (req, res) => {
 
 // Spaces CRUD
 app.post('/api/spaces', async (req, res) => {
-  const { id, name, memberIds } = req.body;
+  const { id, name, memberIds, autoTransferIncomplete } = req.body;
   try {
     await executeQuery(
-      'INSERT INTO spaces (id, name, memberIds) VALUES (?, ?, ?)',
-      [id, name, JSON.stringify(memberIds)]
+      'INSERT INTO spaces (id, name, memberIds, autoTransferIncomplete) VALUES (?, ?, ?, ?)',
+      [id, name, JSON.stringify(memberIds), autoTransferIncomplete || 0]
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -787,12 +804,26 @@ app.post('/api/spaces', async (req, res) => {
 
 app.put('/api/spaces/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, memberIds } = req.body;
+  const { name, memberIds, autoTransferIncomplete } = req.body;
   try {
-    await executeQuery(
-      'UPDATE spaces SET name = ?, memberIds = ? WHERE id = ?',
-      [name, JSON.stringify(memberIds), id]
-    );
+    let query = 'UPDATE spaces SET ';
+    const params = [];
+    if (name !== undefined) {
+      query += 'name = ?, ';
+      params.push(name);
+    }
+    if (memberIds !== undefined) {
+      query += 'memberIds = ?, ';
+      params.push(JSON.stringify(memberIds));
+    }
+    if (autoTransferIncomplete !== undefined) {
+      query += 'autoTransferIncomplete = ?, ';
+      params.push(autoTransferIncomplete);
+    }
+    query = query.slice(0, -2) + ' WHERE id = ?';
+    params.push(id);
+    
+    await executeQuery(query, params);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1046,11 +1077,11 @@ app.delete('/api/task-columns/:id', async (req, res) => {
 });
 
 app.post('/api/tasks', async (req, res) => {
-  const { id, title, description, projectId, designerId, columnId, sortOrder, createdAt } = req.body;
+  const { id, title, description, projectId, designerId, columnId, sortOrder, createdAt, weekStart } = req.body;
   try {
     await executeQuery(
-      'INSERT INTO tasks (id, title, description, projectId, designerId, columnId, sortOrder, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, title, description || '', projectId, designerId || null, columnId, sortOrder, createdAt || new Date().toISOString()]
+      'INSERT INTO tasks (id, title, description, projectId, designerId, columnId, sortOrder, createdAt, weekStart) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, description || '', projectId, designerId || null, columnId, sortOrder, createdAt || new Date().toISOString(), weekStart]
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -1128,7 +1159,7 @@ async function cleanupDeletedImages(oldDesc, newDesc) {
 
 app.put('/api/tasks/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, description, projectId, designerId, columnId, sortOrder } = req.body;
+  const { title, description, projectId, designerId, columnId, sortOrder, weekStart } = req.body;
   try {
     let query = 'UPDATE tasks SET ';
     const params = [];
@@ -1160,6 +1191,10 @@ app.put('/api/tasks/:id', async (req, res) => {
     if (sortOrder !== undefined) {
       query += 'sortOrder = ?, ';
       params.push(sortOrder);
+    }
+    if (weekStart !== undefined) {
+      query += 'weekStart = ?, ';
+      params.push(weekStart);
     }
     query = query.slice(0, -2) + ' WHERE id = ?';
     params.push(id);

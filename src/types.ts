@@ -40,4 +40,5 @@ export interface Space {
   id: string;
   name: string;
   memberIds: string[];
+  autoTransferIncomplete?: boolean | number;
 }

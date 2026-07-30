@@ -1312,6 +1312,7 @@ export const App: React.FC = () => {
       ...cardData,
       sortOrder,
       createdAt: new Date().toISOString(),
+      weekStart: formatDateStringHelper(weekStart),
     };
     setTasks((prev) => [...prev, newCard]);
 
@@ -1331,17 +1332,63 @@ export const App: React.FC = () => {
       designerId?: string | null;
       columnId?: string;
       sortOrder?: number;
+      weekStart?: string;
     },
   ) => {
+    // Автоматически обновляем неделю задачи на активную при любых изменениях (перетаскивании),
+    // если эта задача перенесена из прошлых спринтов
+    const currentCard = tasks.find((t) => t.id === cardId);
+    const activeWeekStartStr = formatDateStringHelper(weekStart);
+    const finalUpdate = { ...updated };
+    if (currentCard && currentCard.weekStart !== activeWeekStartStr) {
+      finalUpdate.weekStart = activeWeekStartStr;
+    }
+
     setTasks((prev) =>
-      prev.map((t) => (t.id === cardId ? { ...t, ...updated } : t)),
+      prev.map((t) => (t.id === cardId ? { ...t, ...finalUpdate } : t)),
     );
 
     fetch(`/api/tasks/${cardId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updated),
+      body: JSON.stringify(finalUpdate),
     }).catch((err) => console.error("Error updating task:", err));
+  };
+
+  const handleBulkUpdateCards = (cardIds: string[], updatedFields: any) => {
+    if (!isAdmin) return;
+    setTasks((prev) =>
+      prev.map((t) => (cardIds.includes(t.id) ? { ...t, ...updatedFields } : t))
+    );
+
+    cardIds.forEach((id) => {
+      fetch(`/api/tasks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedFields),
+      }).catch((err) => console.error(`Error bulk updating task ${id}:`, err));
+    });
+  };
+
+  const handleToggleAutoTransfer = (enabled: boolean) => {
+    if (!isAdmin) return;
+    const currentSpace = spaces.find((s) => s.id === activeSpaceId);
+    if (!currentSpace) return;
+
+    const updatedSpace = {
+      ...currentSpace,
+      autoTransferIncomplete: enabled ? 1 : 0
+    };
+
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === activeSpaceId ? updatedSpace : s))
+    );
+
+    fetch(`/api/spaces/${activeSpaceId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedSpace)
+    }).catch((err) => console.error("Error toggling autoTransferIncomplete:", err));
   };
 
   const handleDeleteCard = (cardId: string) => {
@@ -1406,6 +1453,26 @@ export const App: React.FC = () => {
   const spaceAllocations = allocations.filter((a) =>
     spaceProjects.some((p) => p.id === a.projectId),
   );
+
+  const autoTransfer = activeSpace?.autoTransferIncomplete === 1 || activeSpace?.autoTransferIncomplete === true;
+  const doneColumnIds = columns.filter((col) => col.isDone === 1 || col.isDone === true).map((col) => col.id);
+  const activeWeekStartStr = formatDateStringHelper(weekStart);
+
+  const filteredTasksForActiveWeek = tasks.filter((task) => {
+    if (!task.columnId) return false;
+    
+    const colObj = columns.find((c) => c.id === task.columnId);
+    if (!colObj || colObj.spaceId !== activeSpaceId) return false;
+
+    if (task.weekStart === activeWeekStartStr) return true;
+
+    if (autoTransfer && task.weekStart < activeWeekStartStr) {
+      const isDone = doneColumnIds.includes(task.columnId);
+      return !isDone;
+    }
+
+    return false;
+  });
 
   return (
     <MantineProvider theme={theme}>
@@ -1630,7 +1697,7 @@ export const App: React.FC = () => {
                 isAdmin={isAdmin}
                 loading={loading}
                 columns={columns}
-                tasks={tasks}
+                tasks={filteredTasksForActiveWeek}
               />
 
               {/* Add Project Bar - Hidden if not Admin */}
@@ -1650,7 +1717,7 @@ export const App: React.FC = () => {
               projects={projects}
               allocations={allocations}
               columns={columns}
-              tasks={tasks}
+              tasks={filteredTasksForActiveWeek}
               attachments={attachments}
               links={links}
               onAddColumn={handleAddColumn}
@@ -1666,6 +1733,12 @@ export const App: React.FC = () => {
               onAddProject={handleAddProject}
               weekDays={weekDays}
               loading={loading}
+              onPrevWeek={handlePrevWeek}
+              onNextWeek={handleNextWeek}
+              onCurrentWeek={handleCurrentWeek}
+              autoTransferIncomplete={autoTransfer}
+              onToggleAutoTransfer={handleToggleAutoTransfer}
+              onBulkUpdateCards={handleBulkUpdateCards}
             />
           )}
         </Stack>

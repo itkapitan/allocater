@@ -29,7 +29,9 @@ import {
   Divider,
   ColorInput,
   Textarea,
-  Skeleton
+  Skeleton,
+  Menu,
+  Switch
 } from '@mantine/core';
 import {
   IconPlus,
@@ -38,7 +40,12 @@ import {
   IconNotebook,
   IconLink,
   IconPaperclip,
-  IconDownload
+  IconDownload,
+  IconSettings,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCalendar,
+  IconCheck
 } from '@tabler/icons-react';
 import type { User, Project, Allocation } from '../types';
 
@@ -65,6 +72,12 @@ interface TaskTrackerProps {
   onDeleteLink: (linkId: string) => void;
   onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
   loading?: boolean;
+  onPrevWeek: () => void;
+  onNextWeek: () => void;
+  onCurrentWeek: () => void;
+  autoTransferIncomplete: boolean;
+  onToggleAutoTransfer: (enabled: boolean) => void;
+  onBulkUpdateCards: (cardIds: string[], updatedFields: any) => void;
 }
 
 export const resolveProjectColor = (color: string | undefined): string => {
@@ -102,7 +115,13 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   onAddLink: _onAddLink,
   onDeleteLink: _onDeleteLink,
   onAddProject,
-  loading = false
+  loading = false,
+  onPrevWeek,
+  onNextWeek,
+  onCurrentWeek,
+  autoTransferIncomplete,
+  onToggleAutoTransfer,
+  onBulkUpdateCards
 }) => {
   // Filter columns and tasks for active space
   const spaceColumns = columns
@@ -121,6 +140,9 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   const [editingColumn, setEditingColumn] = useState<any | null>(null);
   const [newProjectModalOpened, setNewProjectModalOpened] = useState(false);
   const [newCardColumnId, setNewCardColumnId] = useState('');
+  const [multiEditActive, setMultiEditActive] = useState(false);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [targetWeekStart, setTargetWeekStart] = useState('');
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [jsonImportModalOpened, setJsonImportModalOpened] = useState(false);
   const [jsonImportText, setJsonImportText] = useState('');
@@ -925,8 +947,178 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     setNewProjMembers([]);
   };
 
+  const formatSprintRange = (start: Date, end: Date) => {
+    const months = ['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'];
+    return `${start.getDate()} ${months[start.getMonth()]} – ${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
+  };
+
+  const getSprintLabel = () => {
+    if (!weekDays || weekDays.length < 7) return '';
+    return formatSprintRange(weekDays[0], weekDays[6]);
+  };
+
+  const getNextWeeksOptions = () => {
+    if (!weekDays || weekDays.length === 0) return [];
+    const baseDate = weekDays[0];
+    const options = [];
+    for (let i = -1; i <= 6; i++) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i * 7);
+      
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const startStr = `${year}-${month}-${day}`;
+      
+      const endD = new Date(d);
+      endD.setDate(d.getDate() + 6);
+      
+      const rangeText = `${d.getDate()} ${['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'][d.getMonth()]} – ${endD.getDate()} ${['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'][endD.getMonth()]}`;
+      
+      let label = `Спринт: ${rangeText}`;
+      if (i === 0) label = `Поточний спринт (${rangeText})`;
+      else if (i === 1) label = `Наступний спринт (${rangeText})`;
+      else if (i === -1) label = `Попередній спринт (${rangeText})`;
+      
+      options.push({ value: startStr, label });
+    }
+    return options;
+  };
+
+  const handleBulkMoveSubmit = () => {
+    if (selectedCardIds.length === 0 || !targetWeekStart) return;
+    onBulkUpdateCards(selectedCardIds, { weekStart: targetWeekStart });
+    setSelectedCardIds([]);
+    setMultiEditActive(false);
+  };
+
   return (
     <div style={{ paddingBottom: '40px' }}>
+      {/* Панель управления спринтом и групповыми операциями */}
+      <Paper
+        withBorder
+        className="glass-panel"
+        style={{
+          padding: '12px 20px',
+          marginBottom: '20px',
+          borderRadius: '16px',
+          border: '1px solid rgba(99, 102, 241, 0.15)'
+        }}
+      >
+        <Group justify="space-between" align="center">
+          {/* Навигатор по неделям */}
+          <Group gap="xs">
+            <ActionIcon variant="light" color="indigo" onClick={onPrevWeek} radius="md" size="md">
+              <IconChevronLeft size={16} />
+            </ActionIcon>
+            
+            <Group gap="xs" style={{ minWidth: '220px', justifyContent: 'center' }}>
+              <IconCalendar size={16} color="var(--primary-color)" />
+              <Text fw={700} size="sm" style={{ fontFamily: 'var(--font-family)', color: 'var(--text-main)' }}>
+                {getSprintLabel()}
+              </Text>
+            </Group>
+
+            <ActionIcon variant="light" color="indigo" onClick={onNextWeek} radius="md" size="md">
+              <IconChevronRight size={16} />
+            </ActionIcon>
+
+            <Button size="xs" variant="subtle" color="indigo" onClick={onCurrentWeek} radius="md" style={{ marginLeft: '8px' }}>
+              Поточний спринт
+            </Button>
+          </Group>
+
+          {/* Групповой перенос или Шестеренка настроек */}
+          <Group gap="sm">
+            {multiEditActive ? (
+              <Group gap="xs" style={{ animation: 'fadeIn 0.2s ease-in-out' }}>
+                <Text size="xs" fw={700} style={{ color: 'var(--text-main)' }}>
+                  Вибрано задач: <Badge color="indigo">{selectedCardIds.length}</Badge>
+                </Text>
+                
+                <Select
+                  size="xs"
+                  radius="md"
+                  placeholder="Оберіть спринт для переносу"
+                  value={targetWeekStart}
+                  onChange={(val) => val && setTargetWeekStart(val)}
+                  data={getNextWeeksOptions()}
+                  style={{ width: '300px' }}
+                />
+
+                <Button
+                  size="xs"
+                  color="indigo"
+                  radius="md"
+                  onClick={handleBulkMoveSubmit}
+                  disabled={selectedCardIds.length === 0}
+                  leftSection={<IconCheck size={14} />}
+                >
+                  Перенести
+                </Button>
+
+                <Button
+                  size="xs"
+                  variant="outline"
+                  color="red"
+                  radius="md"
+                  onClick={() => {
+                    setMultiEditActive(false);
+                    setSelectedCardIds([]);
+                  }}
+                >
+                  Скасувати
+                </Button>
+              </Group>
+            ) : (
+              isAdmin && (
+                <Menu shadow="md" width={280} radius="md" position="bottom-end" closeOnItemClick={false}>
+                  <Menu.Target>
+                    <ActionIcon variant="light" color="indigo" size="lg" radius="md">
+                      <IconSettings size={18} />
+                    </ActionIcon>
+                  </Menu.Target>
+
+                  <Menu.Dropdown>
+                    <Menu.Label>Налаштування спринту</Menu.Label>
+                    
+                    <div style={{ padding: '8px 12px' }}>
+                      <Switch
+                        label="Автоперенос невиконаних задач"
+                        checked={autoTransferIncomplete}
+                        onChange={(e) => onToggleAutoTransfer(e.currentTarget.checked)}
+                        size="xs"
+                        styles={{ label: { cursor: 'pointer', fontFamily: 'var(--font-family)' } }}
+                      />
+                    </div>
+
+                    <Menu.Divider />
+
+                    <Menu.Item
+                      leftSection={<IconCheck size={16} />}
+                      onClick={() => {
+                        setMultiEditActive(true);
+                        setSelectedCardIds([]);
+                        if (weekDays.length > 0) {
+                          const nextWeek = new Date(weekDays[0]);
+                          nextWeek.setDate(nextWeek.getDate() + 7);
+                          const year = nextWeek.getFullYear();
+                          const month = String(nextWeek.getMonth() + 1).padStart(2, '0');
+                          const day = String(nextWeek.getDate()).padStart(2, '0');
+                          setTargetWeekStart(`${year}-${month}-${day}`);
+                        }
+                      }}
+                      styles={{ item: { fontFamily: 'var(--font-family)' } }}
+                    >
+                      Групове перенесення задач
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              )
+            )}
+          </Group>
+        </Group>
+      </Paper>
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="board" type="COLUMN" direction="horizontal">
           {(provided) => (
@@ -1062,7 +1254,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
                         {/* Tasks Droppable container */}
                         <Droppable droppableId={col.id} type="CARD" direction="vertical">
-                          {(providedTasks) => (
+                  {(providedTasks) => (
                             <Stack
                               ref={providedTasks.innerRef}
                               {...providedTasks.droppableProps}
@@ -1080,40 +1272,68 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                                 const taskUrls = links.filter((l) => l.taskId === task.id);
 
                                 return (
-                                  <Draggable key={task.id} draggableId={task.id} index={idx}>
+                                  <Draggable key={task.id} draggableId={task.id} index={idx} isDragDisabled={multiEditActive}>
                                     {(providedTaskCard) => (
                                       <Paper
                                         ref={providedTaskCard.innerRef}
                                         {...providedTaskCard.draggableProps}
                                         {...providedTaskCard.dragHandleProps}
                                         withBorder
-                                        onClick={() => handleOpenTask(task)}
+                                        onClick={(e) => {
+                                          if (multiEditActive) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setSelectedCardIds((prev) =>
+                                              prev.includes(task.id)
+                                                ? prev.filter((id) => id !== task.id)
+                                                : [...prev, task.id]
+                                            );
+                                          } else {
+                                            handleOpenTask(task);
+                                          }
+                                        }}
                                         style={{
                                           ...providedTaskCard.draggableProps.style,
                                           padding: '12px',
                                           borderRadius: '12px',
-                                          backgroundColor: '#ffffff',
+                                          backgroundColor: (multiEditActive && selectedCardIds.includes(task.id)) ? '#eef2ff' : '#ffffff',
                                           cursor: 'pointer',
-                                          boxShadow: '0 2px 8px -2px rgba(0,0,0,0.04)',
+                                          boxShadow: (multiEditActive && selectedCardIds.includes(task.id))
+                                            ? '0 4px 12px -2px rgba(99, 102, 241, 0.12)'
+                                            : '0 2px 8px -2px rgba(0,0,0,0.04)',
                                           borderLeft: project ? `4px solid ${resolvedProjColor}` : '1px solid var(--border-color)',
-                                          transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                                          borderTop: (multiEditActive && selectedCardIds.includes(task.id)) ? '1px solid rgba(99, 102, 241, 0.4)' : undefined,
+                                          borderRight: (multiEditActive && selectedCardIds.includes(task.id)) ? '1px solid rgba(99, 102, 241, 0.4)' : undefined,
+                                          borderBottom: (multiEditActive && selectedCardIds.includes(task.id)) ? '1px solid rgba(99, 102, 241, 0.4)' : undefined,
+                                          transition: 'transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease'
                                         }}
                                         className="kanban-card"
                                       >
                                         <Stack gap="xs">
-                                          {project && (
-                                            <Badge
-                                              size="xs"
-                                              variant="light"
-                                              style={{
-                                                backgroundColor: `${resolvedProjColor}15`,
-                                                color: resolvedProjColor,
-                                                borderColor: `${resolvedProjColor}30`
-                                              }}
-                                            >
-                                              {project.name}
-                                            </Badge>
-                                          )}
+                                          <Group justify="space-between" align="center" style={{ width: '100%' }}>
+                                            {project ? (
+                                              <Badge
+                                                size="xs"
+                                                variant="light"
+                                                style={{
+                                                  backgroundColor: `${resolvedProjColor}15`,
+                                                  color: resolvedProjColor,
+                                                  borderColor: `${resolvedProjColor}30`
+                                                }}
+                                              >
+                                                {project.name}
+                                              </Badge>
+                                            ) : <div />}
+                                            
+                                            {multiEditActive && (
+                                              <Checkbox
+                                                checked={selectedCardIds.includes(task.id)}
+                                                readOnly
+                                                size="xs"
+                                                color="indigo"
+                                              />
+                                            )}
+                                          </Group>
 
                                           <Text fw={700} size="sm" style={{ color: 'var(--text-main)', lineHeight: 1.3 }}>
                                             {task.title}
