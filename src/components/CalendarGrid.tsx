@@ -176,7 +176,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     if (e.button !== 0 || !isAdmin) return;
 
     const target = e.target as HTMLElement;
-    if (target.closest('.allocation-capsule') || target.closest('.mantine-Popover-dropdown')) {
+    if (
+      target.closest('.allocation-capsule') ||
+      target.closest('.allocation-content') ||
+      target.closest('.allocation-handle') ||
+      target.closest('.mantine-Popover-dropdown') ||
+      target.closest('.mantine-Menu-dropdown') ||
+      target.closest('.mantine-Select-dropdown') ||
+      target.closest('.mantine-Modal-content')
+    ) {
       return;
     }
 

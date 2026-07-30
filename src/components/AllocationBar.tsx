@@ -275,8 +275,10 @@ export const AllocationBar: React.FC<AllocationBarProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       
-      // Завершаем перетаскивание и проверяем наложение
-      onUpdateAllocation(allocation.id, latestValues, true, revertValues);
+      // Завершаем перетаскивание и проверяем наложение, только если элемент действительно перетаскивался
+      if (wasDraggedRef.current) {
+        onUpdateAllocation(allocation.id, latestValues, true, revertValues);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
