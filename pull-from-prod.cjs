@@ -54,20 +54,66 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       dailyCapacity REAL
     )`);
 
+    // Ensure local board tables exist before pulling tasks
+    await runQuery(`CREATE TABLE IF NOT EXISTS task_columns (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      spaceId TEXT,
+      sortOrder INTEGER,
+      isDone INTEGER DEFAULT 0
+    )`);
+
+    await runQuery(`CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      description TEXT,
+      projectId TEXT,
+      designerId TEXT,
+      columnId TEXT,
+      sortOrder INTEGER,
+      createdAt TEXT,
+      weekStart TEXT
+    )`);
+
+    await runQuery(`CREATE TABLE IF NOT EXISTS task_attachments (
+      id TEXT PRIMARY KEY,
+      taskId TEXT,
+      filename TEXT,
+      fileurl TEXT
+    )`);
+
+    await runQuery(`CREATE TABLE IF NOT EXISTS task_links (
+      id TEXT PRIMARY KEY,
+      taskId TEXT,
+      url TEXT,
+      title TEXT
+    )`);
+
     console.log('Fetching live data from production (https://allocater.radcor.pro)...');
     const response = await fetch('https://allocater.radcor.pro/api/data');
     if (!response.ok) {
       throw new Error(`Failed to fetch production data: ${response.status} ${response.statusText}`);
     }
-    
     const prodData = await response.json();
     const { users, projects, allocations, capacities } = prodData;
+
+    console.log('Fetching live tasks from production (https://allocater.radcor.pro)...');
+    const tasksResponse = await fetch('https://allocater.radcor.pro/api/tasks/data');
+    if (!tasksResponse.ok) {
+      throw new Error(`Failed to fetch production tasks: ${tasksResponse.status} ${tasksResponse.statusText}`);
+    }
+    const prodTasksData = await tasksResponse.json();
+    const { columns: prodCols, tasks: prodTasks, attachments: prodAttachs, links: prodLinks } = prodTasksData;
     
     console.log(`Successfully fetched from production:\n` +
       `- ${users ? users.length : 0} users\n` +
       `- ${projects ? projects.length : 0} projects\n` +
       `- ${allocations ? allocations.length : 0} allocations\n` +
-      `- ${capacities ? Object.keys(capacities).length : 0} capacities`);
+      `- ${capacities ? Object.keys(capacities).length : 0} capacities\n` +
+      `- ${prodCols ? prodCols.length : 0} task columns\n` +
+      `- ${prodTasks ? prodTasks.length : 0} tasks\n` +
+      `- ${prodAttachs ? prodAttachs.length : 0} attachments\n` +
+      `- ${prodLinks ? prodLinks.length : 0} links`);
       
     // Wrap database operations in a transaction
     await runQuery('BEGIN TRANSACTION');
@@ -78,6 +124,10 @@ const db = new sqlite3.Database(dbPath, async (err) => {
     await runQuery('DELETE FROM projects');
     await runQuery('DELETE FROM allocations');
     await runQuery('DELETE FROM capacities');
+    await runQuery('DELETE FROM task_columns');
+    await runQuery('DELETE FROM tasks');
+    await runQuery('DELETE FROM task_attachments');
+    await runQuery('DELETE FROM task_links');
     
     // 2. Insert Users
     if (users && users.length > 0) {
@@ -115,6 +165,47 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       const stmt = db.prepare('INSERT INTO capacities (designerId, dailyCapacity) VALUES (?, ?)');
       for (const [designerId, dailyCapacity] of Object.entries(capacities)) {
         stmt.run(designerId, dailyCapacity);
+      }
+      stmt.finalize();
+    }
+
+    // 6. Insert Columns
+    if (prodCols && prodCols.length > 0) {
+      console.log('Inserting columns...');
+      const stmt = db.prepare('INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone) VALUES (?, ?, ?, ?, ?)');
+      for (const c of prodCols) {
+        stmt.run(c.id, c.name, c.spaceId, c.sortOrder || 0, c.isDone ? 1 : 0);
+      }
+      stmt.finalize();
+    }
+
+    // 7. Insert Tasks
+    if (prodTasks && prodTasks.length > 0) {
+      console.log('Inserting tasks...');
+      const stmt = db.prepare('INSERT INTO tasks (id, title, description, projectId, designerId, columnId, sortOrder, createdAt, weekStart) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      for (const t of prodTasks) {
+        // Если у задачи на проде нет weekStart, ставим понедельник этой недели по умолчанию
+        stmt.run(t.id, t.title, t.description || '', t.projectId, t.designerId || null, t.columnId, t.sortOrder || 0, t.createdAt || new Date().toISOString(), t.weekStart || '2026-07-27');
+      }
+      stmt.finalize();
+    }
+
+    // 8. Insert Attachments
+    if (prodAttachs && prodAttachs.length > 0) {
+      console.log('Inserting attachments...');
+      const stmt = db.prepare('INSERT INTO task_attachments (id, taskId, filename, fileurl) VALUES (?, ?, ?, ?)');
+      for (const a of prodAttachs) {
+        stmt.run(a.id, a.taskId, a.fileName, a.fileUrl);
+      }
+      stmt.finalize();
+    }
+
+    // 9. Insert Links
+    if (prodLinks && prodLinks.length > 0) {
+      console.log('Inserting links...');
+      const stmt = db.prepare('INSERT INTO task_links (id, taskId, url, title) VALUES (?, ?, ?, ?)');
+      for (const l of prodLinks) {
+        stmt.run(l.id, l.taskId, l.url, l.title);
       }
       stmt.finalize();
     }
