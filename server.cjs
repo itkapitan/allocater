@@ -409,7 +409,8 @@ app.get('/api/data', async (req, res) => {
     const spaces = rawSpaces.map((s) => ({
       id: s.id,
       name: s.name,
-      memberIds: JSON.parse(s.memberids || s.memberIds || '[]')
+      memberIds: JSON.parse(s.memberids || s.memberIds || '[]'),
+      autoTransferIncomplete: s.autotransferincomplete !== undefined ? s.autotransferincomplete : s.autoTransferIncomplete
     }));
 
     const capacities = {};
@@ -1005,7 +1006,8 @@ app.get('/api/tasks/data', async (req, res) => {
         designerId: t.designerid || t.designerId,
         columnId: t.columnid || t.columnId,
         sortOrder: t.sortorder || t.sortOrder,
-        createdAt: t.createdat || t.createdAt
+        createdAt: t.createdat || t.createdAt,
+        weekStart: t.weekstart || t.weekStart
       })),
       attachments: attachments.map(a => ({
         id: a.id,
