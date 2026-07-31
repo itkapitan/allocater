@@ -11,11 +11,29 @@ const PORT = process.env.PORT || 5101;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// A middleware to block incoming requests until the DB has finished initializing (highly relevant for Serverless)
+app.use(async (req, res, next) => {
+  try {
+    await dbInitPromise;
+    next();
+  } catch (err) {
+    console.error('Database initialization failed:', err);
+    res.status(500).json({ error: 'Database initialization failed: ' + err.message });
+  }
+});
+
 // Detect if we should use PostgreSQL (Vercel/Neon) or local SQLite
 const isPostgres = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
 
 let db = null;
 let pgPool = null;
+
+let resolveDbInit = null;
+let rejectDbInit = null;
+const dbInitPromise = new Promise((resolve, reject) => {
+  resolveDbInit = resolve;
+  rejectDbInit = reject;
+});
 
 // Initial mock data definitions
 const INITIAL_USERS = [
@@ -357,8 +375,10 @@ async function initializeDb() {
         );
       }
     }
+    if (resolveDbInit) resolveDbInit();
   } catch (err) {
     console.error('Error initializing database:', err);
+    if (rejectDbInit) rejectDbInit(err);
   }
 }
 
