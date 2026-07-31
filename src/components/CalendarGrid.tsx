@@ -1,10 +1,35 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress, TextInput, ColorInput, Checkbox, Divider } from '@mantine/core';
-import { IconUserPlus, IconTrash, IconDotsVertical, IconSearch, IconPencil, IconBrandFigma, IconCopy, IconNotebook } from '@tabler/icons-react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import type { User, Project, Allocation } from '../types';
-import { AllocationBar } from './AllocationBar';
-import { validateAllocation } from '../App';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Menu,
+  ActionIcon,
+  Button,
+  Text,
+  Avatar,
+  Modal,
+  Stack,
+  Group,
+  Tooltip,
+  Skeleton,
+  Progress,
+  TextInput,
+  ColorInput,
+  Checkbox,
+  Divider,
+} from "@mantine/core";
+import {
+  IconUserPlus,
+  IconTrash,
+  IconDotsVertical,
+  IconSearch,
+  IconPencil,
+  IconBrandFigma,
+  IconCopy,
+  IconNotebook,
+} from "@tabler/icons-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import type { User, Project, Allocation } from "../types";
+import { AllocationBar } from "./AllocationBar";
+import { validateAllocation } from "../App";
 
 // Helper to compute lanes for a project's allocations
 const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
@@ -31,19 +56,21 @@ const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
 
   sortedDesignerIds.forEach((designerId) => {
     const designerAllocations = groups[designerId];
-    
+
     // Sort by startDate
     designerAllocations.sort((a, b) => a.startDate.localeCompare(b.startDate));
-    
+
     // Pack overlapping allocations for this designer into sub-lanes
     const subLanes: Allocation[][] = [];
-    
+
     designerAllocations.forEach((alloc) => {
       let placed = false;
       for (const lane of subLanes) {
         // Check if alloc overlaps with any item in this lane
         const hasOverlap = lane.some((item) => {
-          return alloc.startDate <= item.endDate && alloc.endDate >= item.startDate;
+          return (
+            alloc.startDate <= item.endDate && alloc.endDate >= item.startDate
+          );
         });
         if (!hasOverlap) {
           lane.push(alloc);
@@ -55,14 +82,13 @@ const computeLanes = (projectAllocations: Allocation[]): Allocation[][] => {
         subLanes.push([alloc]);
       }
     });
-    
+
     // Add all sub-lanes to final lanes
     finalLanes.push(...subLanes);
   });
 
   return finalLanes;
 };
-
 
 interface CalendarGridProps {
   users: User[];
@@ -74,9 +100,18 @@ interface CalendarGridProps {
   onDeleteProject: (projectId: string) => void;
   onAddProjectMember: (projectId: string, userId: string) => void;
   onRemoveProjectMember: (projectId: string, userId: string) => void;
-  onReplaceProjectMember: (projectId: string, oldUserId: string, newUserId: string) => void;
-  onAddAllocation: (allocation: Omit<Allocation, 'id'>) => void;
-  onUpdateAllocation: (id: string, updated: Partial<Allocation>, commit?: boolean, revertValues?: Partial<Allocation>) => void;
+  onReplaceProjectMember: (
+    projectId: string,
+    oldUserId: string,
+    newUserId: string,
+  ) => void;
+  onAddAllocation: (allocation: Omit<Allocation, "id">) => void;
+  onUpdateAllocation: (
+    id: string,
+    updated: Partial<Allocation>,
+    commit?: boolean,
+    revertValues?: Partial<Allocation>,
+  ) => void;
   onDeleteAllocation: (id: string) => void;
   onUpdateProjectsList: (newList: Project[]) => void;
   onSaveProjectsOrder: (orderedIds: string[]) => void;
@@ -90,7 +125,7 @@ interface CalendarGridProps {
     memberIds: string[],
     existingProjectId?: string,
     taskNumber?: string,
-    figmaLink?: string
+    figmaLink?: string,
   ) => void;
 }
 
@@ -117,30 +152,42 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onAddProject,
 }) => {
   // Drag selection state
-  const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
-  const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>([]);
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+  const [selectedAllocationIds, setSelectedAllocationIds] = useState<string[]>(
+    [],
+  );
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
-  const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
-  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const selectionStartRef = useRef<{
+    x: number;
+    y: number;
+    projectId: string;
+    dayIdx: number;
+  } | null>(null);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
 
   // Project editing modal states
   const [editProjectModalOpened, setEditProjectModalOpened] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [editProjName, setEditProjName] = useState('');
-  const [editProjColor, setEditProjColor] = useState('#6366f1');
-  const [editProjTaskNumber, setEditProjTaskNumber] = useState('');
-  const [editProjFigmaLink, setEditProjFigmaLink] = useState('');
+  const [editProjName, setEditProjName] = useState("");
+  const [editProjColor, setEditProjColor] = useState("#6366f1");
+  const [editProjTaskNumber, setEditProjTaskNumber] = useState("");
+  const [editProjFigmaLink, setEditProjFigmaLink] = useState("");
   const [editProjMembers, setEditProjMembers] = useState<string[]>([]);
 
   const resolveProjectColor = (color: string | undefined): string => {
-    if (!color) return '#6366f1';
+    if (!color) return "#6366f1";
     const mapping: Record<string, string> = {
-      indigo: '#6366f1',
-      blue: '#3b82f6',
-      teal: '#0d9488',
-      emerald: '#10b981',
-      orange: '#f59e0b',
-      rose: '#f43f5e',
+      indigo: "#6366f1",
+      blue: "#3b82f6",
+      teal: "#0d9488",
+      emerald: "#10b981",
+      orange: "#f59e0b",
+      rose: "#f43f5e",
     };
     return mapping[color.toLowerCase()] || color;
   };
@@ -148,9 +195,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const handleStartEditProject = (project: Project) => {
     setEditingProject(project);
     setEditProjName(project.name);
-    setEditProjColor(project.color || '#6366f1');
-    setEditProjTaskNumber(project.taskNumber || '');
-    setEditProjFigmaLink(project.figmaLink || '');
+    setEditProjColor(project.color || "#6366f1");
+    setEditProjTaskNumber(project.taskNumber || "");
+    setEditProjFigmaLink(project.figmaLink || "");
     setEditProjMembers(project.memberIds || []);
     setEditProjectModalOpened(true);
   };
@@ -165,7 +212,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         editProjMembers,
         editingProject.id,
         editProjTaskNumber.trim(),
-        editProjFigmaLink.trim()
+        editProjFigmaLink.trim(),
       );
     }
     setEditProjectModalOpened(false);
@@ -175,8 +222,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   // Formatter helper
   const formatDateString = (date: Date) => {
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
 
@@ -188,7 +235,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       const today = new Date();
       const todayStr = formatDateString(today);
       const todayIdx = days.findIndex((d) => formatDateString(d) === todayStr);
-      
+
       if (todayIdx !== -1) {
         const hours = today.getHours();
         const minutes = today.getMinutes();
@@ -211,11 +258,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
       // Do not clear selection if clicking inside capsules, actions bar, modals, popovers or dropdowns
       if (
-        target.closest('.allocation-capsule') ||
-        target.closest('.selection-actions-bar') ||
-        target.closest('.mantine-Popover-dropdown') ||
-        target.closest('.mantine-Menu-dropdown') ||
-        target.closest('.mantine-Modal-content')
+        target.closest(".allocation-capsule") ||
+        target.closest(".selection-actions-bar") ||
+        target.closest(".mantine-Popover-dropdown") ||
+        target.closest(".mantine-Menu-dropdown") ||
+        target.closest(".mantine-Modal-content")
       ) {
         return;
       }
@@ -223,34 +270,38 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       setSelectedAllocationIds([]);
     };
 
-    window.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener("mousedown", handleOutsideClick);
     return () => {
-      window.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [selectedAllocationIds]);
 
   // Handle drag-selection and click-to-create
-  const handleCellMouseDown = (e: React.MouseEvent, projectId: string, dayIdx: number) => {
+  const handleCellMouseDown = (
+    e: React.MouseEvent,
+    projectId: string,
+    dayIdx: number,
+  ) => {
     if (e.button !== 0 || !isAdmin) return;
 
     const target = e.target as HTMLElement;
     if (
-      target.closest('.allocation-capsule') ||
-      target.closest('.allocation-content') ||
-      target.closest('.allocation-handle') ||
-      target.closest('.mantine-Popover-dropdown') ||
-      target.closest('.mantine-Menu-dropdown') ||
-      target.closest('.mantine-Select-dropdown') ||
-      target.closest('.mantine-Modal-content')
+      target.closest(".allocation-capsule") ||
+      target.closest(".allocation-content") ||
+      target.closest(".allocation-handle") ||
+      target.closest(".mantine-Popover-dropdown") ||
+      target.closest(".mantine-Menu-dropdown") ||
+      target.closest(".mantine-Select-dropdown") ||
+      target.closest(".mantine-Modal-content")
     ) {
       return;
     }
 
     e.preventDefault();
-    document.body.classList.add('is-selecting');
+    document.body.classList.add("is-selecting");
 
-    const gridContainer = document.querySelector('.calendar-grid-container');
-    const headerEl = document.querySelector('.project-column-header');
+    const gridContainer = document.querySelector(".calendar-grid-container");
+    const headerEl = document.querySelector(".project-column-header");
     if (!gridContainer || !headerEl) return;
 
     const gridRect = gridContainer.getBoundingClientRect();
@@ -292,8 +343,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       const scrollDelta = window.scrollY - initialScrollY;
 
       // Viewport-relative current coordinates
-      const vpCurrentX = Math.max(minX, Math.min(maxX, currentMouseXRef.current));
-      const vpCurrentY = Math.max(0, Math.min(window.innerHeight, currentMouseYRef.current));
+      const vpCurrentX = Math.max(
+        minX,
+        Math.min(maxX, currentMouseXRef.current),
+      );
+      const vpCurrentY = Math.max(
+        0,
+        Math.min(window.innerHeight, currentMouseYRef.current),
+      );
 
       // Grid-relative current coordinates (for rendering styles)
       const gridCurrentX = vpCurrentX - currentGridRect.left;
@@ -316,9 +373,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       };
 
       const selectedIds: string[] = [];
-      const capsules = document.querySelectorAll('.allocation-capsule');
+      const capsules = document.querySelectorAll(".allocation-capsule");
       capsules.forEach((capsule) => {
-        const id = capsule.getAttribute('data-allocation-id');
+        const id = capsule.getAttribute("data-allocation-id");
         if (id) {
           const rect = capsule.getBoundingClientRect();
           const intersects = !(
@@ -360,9 +417,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     const handleMouseUp = (upEvent: MouseEvent) => {
       clearInterval(scrollInterval);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.classList.remove('is-selecting');
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.classList.remove("is-selecting");
 
       const start = selectionStartRef.current;
       if (start) {
@@ -381,8 +438,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       selectionStartRef.current = null;
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
   };
 
   const handleDragEnd = (result: any) => {
@@ -405,22 +462,25 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     // 3. Force browser repaint after drop animation finishes (approx 200-250ms)
     // This resolves browser rendering bug in Chrome/Safari where elements stay stuck in promoted rendering layers
     setTimeout(() => {
-      const grid = document.querySelector('.calendar-grid-container') as HTMLElement;
+      const grid = document.querySelector(
+        ".calendar-grid-container",
+      ) as HTMLElement;
       if (grid) {
         grid.offsetHeight; // triggers reflow
-        grid.style.transform = 'translateZ(0)'; // forces composite layer redraw
+        grid.style.transform = "translateZ(0)"; // forces composite layer redraw
         requestAnimationFrame(() => {
-          grid.style.transform = '';
+          grid.style.transform = "";
         });
       }
     }, 250);
   };
 
-
   const handleSingleClickCreate = (projectId: string, dayIdx: number) => {
     const project = projects.find((p) => p.id === projectId);
     if (!project) return;
-    const designers = users.filter((u) => u.isDesigner && project.memberIds.includes(u.id));
+    const designers = users.filter(
+      (u) => u.isDesigner && project.memberIds.includes(u.id),
+    );
     if (designers.length === 0) return;
 
     const startDateStr = formatDateString(days[dayIdx]);
@@ -431,11 +491,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     // 1. Весь рабочий день (hours = capacity, offset = 0)
     // 2. Первая половина дня (hours = capacity / 2, offset = 0)
     // 3. Вторая половина дня (hours = capacity / 2, offset = capacity / 2)
-    let bestAlloc: Omit<Allocation, 'id'> | null = null;
+    let bestAlloc: Omit<Allocation, "id"> | null = null;
 
     for (const designer of designers) {
       const capacity = designerCapacities[designer.id] || 8;
-      
+
       const options = [
         { hours: capacity, offsetHours: 0 },
         { hours: capacity / 2, offsetHours: 0 },
@@ -452,7 +512,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           offsetHours: option.offsetHours,
         };
 
-        const validation = validateAllocation(proposed, allocations, projects, designerCapacities);
+        const validation = validateAllocation(
+          proposed,
+          allocations,
+          projects,
+          designerCapacities,
+        );
         if (validation.valid) {
           bestAlloc = proposed;
           break;
@@ -484,24 +549,27 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   // Keyboard shortcut listener for deletion and deselect
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAllocationIds.length > 0) {
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedAllocationIds.length > 0
+      ) {
         const activeEl = document.activeElement;
         if (
           activeEl &&
-          (activeEl.tagName === 'INPUT' ||
-            activeEl.tagName === 'TEXTAREA' ||
-            activeEl.hasAttribute('contenteditable'))
+          (activeEl.tagName === "INPUT" ||
+            activeEl.tagName === "TEXTAREA" ||
+            activeEl.hasAttribute("contenteditable"))
         ) {
           return;
         }
         setDeleteModalOpened(true);
       }
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setSelectedAllocationIds([]);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedAllocationIds]);
 
   const handleConfirmDelete = () => {
@@ -514,18 +582,16 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   // Helper to format short date label (e.g. "20.07")
   const getDayLabel = (date: Date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
     return `${day}.${month}`;
   };
 
   // Helper to get day name in Ukrainian
   const getDayNameUa = (dayIndex: number) => {
-    const names = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    const names = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
     return names[dayIndex];
   };
-
-
 
   return (
     <div className="calendar-grid-container">
@@ -540,13 +606,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       )}
 
       {/* Grid Headers Row */}
-      <div className="project-column-header">Проєкти ({projects.length}) / Виконавці</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderLeft: '1px solid var(--border-color)' }}>
+      <div className="project-column-header">
+        Проєкти ({projects.length}) / Виконавці
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          borderLeft: "1px solid var(--border-color)",
+        }}
+      >
         {days.map((day) => {
           return (
             <div className="calendar-header-cell" key={day.toISOString()}>
               <span className="calendar-day-header">{getDayLabel(day)}</span>
-              <span className="calendar-day-name">{getDayNameUa(day.getDay())}</span>
+              <span className="calendar-day-name">
+                {getDayNameUa(day.getDay())}
+              </span>
             </div>
           );
         })}
@@ -559,9 +635,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             const visibleProjects = projects.filter((project) => {
               if (!project.isArchived) return true;
               return allocations.some((a) => {
-                return a.projectId === project.id &&
-                       a.startDate <= endOfWeekStrVal &&
-                       a.endDate >= startOfWeekStrVal;
+                return (
+                  a.projectId === project.id &&
+                  a.startDate <= endOfWeekStrVal &&
+                  a.endDate >= startOfWeekStrVal
+                );
               });
             });
 
@@ -571,509 +649,865 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ref={provided.innerRef}
                 className="projects-rows-container"
               >
-                {loading ? (
-                  Array.from({ length: 4 }).map((_, idx) => (
-                    <div key={idx} className="project-row" style={{ height: '140px' }}>
-                      <div className="project-info-cell" style={{ display: 'flex', flexDirection: 'column', gap: '12px', justifyContent: 'center', height: '140px' }}>
-                        <Skeleton height={20} width="60%" radius="sm" animate />
-                        <Skeleton height={28} width="40%" radius="xl" animate />
-                      </div>
-                      <div style={{ flexGrow: 1, borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', padding: '0 24px', height: '140px' }}>
-                        <Skeleton height={40} style={{ width: '100%' }} radius="md" animate />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  visibleProjects.map((project, idx) => {
-                    const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
-                    const projectDesigners = projectMembers.filter((u) => u.isDesigner);
-                    const nonProjectUsers = users.filter((u) => !project.memberIds.includes(u.id));
-                    const filteredNonProjectUsers = nonProjectUsers.filter((u) => {
-                      const q = memberSearchQuery.toLowerCase().trim();
-                      if (!q) return true;
-                      return u.name.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
-                    });
-                    const startOfWeekStr = formatDateString(days[0]);
-                    const endOfWeekStr = formatDateString(days[days.length - 1]);
-
-                    // Расчет прогресса задач проекта
-                    const projectTasks = tasks.filter((t) => t.projectId === project.id);
-                    const doneColumnIds = columns.filter((col) => col.isDone === 1 || col.isDone === true).map((col) => col.id);
-                    const doneTasks = projectTasks.filter((t) => doneColumnIds.includes(t.columnId));
-                    const totalTasksCount = projectTasks.length;
-                    const doneTasksCount = doneTasks.length;
-                    const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
-
-                // Compute lanes for this project
-                const projectAllocations = allocations.filter((a) => {
-                  return a.projectId === project.id &&
-                         a.startDate <= endOfWeekStr &&
-                         a.endDate >= startOfWeekStr;
-                });
-                const lanes = computeLanes(projectAllocations);
-
-                return (
-                  <Draggable key={project.id} draggableId={project.id} index={idx} isDragDisabled={!isAdmin}>
-                    {(draggableProvided, snapshot) => (
+                {loading
+                  ? Array.from({ length: 4 }).map((_, idx) => (
                       <div
-                        ref={draggableProvided.innerRef}
-                        {...draggableProvided.draggableProps}
-                        className={`project-row ${snapshot.isDragging ? 'is-dragging' : ''}`}
+                        key={idx}
+                        className="project-row"
+                        style={{ height: "140px" }}
                       >
-                        {/* Left Cell: Project Name & Members */}
-                        <div className="project-info-cell" style={{ position: 'relative' }}>
-                          {/* Color Badge Capsule */}
-                          <div 
-                            style={{
-                              position: 'absolute',
-                              left: 0,
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              width: '5px',
-                              height: '60px',
-                              borderRadius: '9px',
-                              backgroundColor: resolveProjectColor(project.color),
-                              zIndex: 10,
-                            }}
-                          />
-
-                          <div className="project-title-container" style={{ display: 'flex', alignItems: 'center' }}>
-                            <span
-                              {...draggableProvided.dragHandleProps}
-                              className="project-drag-number"
-                              title={isAdmin ? 'Перетягніть для зміни приоритету' : undefined}
-                              style={{
-                                cursor: isAdmin ? 'ns-resize' : 'default',
-                                fontWeight: 700,
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                                marginRight: '8px',
-                                userSelect: 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: 'rgba(99, 102, 241, 0.08)',
-                                border: '1px solid rgba(99, 102, 241, 0.15)',
-                                transition: 'all 0.2s',
-                              }}
-                            >
-                              {idx + 1}
-                            </span>
-
-                            <input
-                              type="text"
-                              className="project-name-input"
-                              value={project.name}
-                              onChange={(e) => onUpdateProjectName(project.id, e.target.value)}
-                              placeholder="Введіть назву проєкту"
-                              readOnly={!isAdmin}
-                              style={{
-                                cursor: isAdmin ? 'text' : 'default',
-                                background: 'transparent',
-                                flexGrow: 1,
-                              }}
-                            />
-                            
-                            {isAdmin && (
-                              <Menu shadow="md" width={200} position="right-start">
-                                <Menu.Target>
-                                  <ActionIcon variant="subtle" color="gray" size="sm">
-                                    <IconDotsVertical size={16} />
-                                  </ActionIcon>
-                                </Menu.Target>
-                                <Menu.Dropdown>
-                                  <Menu.Label>Керування проєктом</Menu.Label>
-                                  <Menu.Item
-                                    leftSection={<IconPencil size={14} />}
-                                    onClick={() => handleStartEditProject(project)}
-                                  >
-                                    Редагувати проєкт
-                                  </Menu.Item>
-                                  <Menu.Item
-                                    color="red"
-                                    leftSection={<IconTrash size={14} />}
-                                    onClick={() => {
-                                      onDeleteProject(project.id);
-                                    }}
-                                  >
-                                    Видалити проєкт
-                                  </Menu.Item>
-                                </Menu.Dropdown>
-                              </Menu>
-                            )}
-                          </div>
-
-                          {/* Project Metadata: Task Number and Figma Link */}
-                          {(project.taskNumber || project.figmaLink) && (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '-8px' }}>
-                              {project.taskNumber && (
-                                <Group gap={2} align="center" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && handleStartEditProject(project)}>
-                                  <Text size="11px" c="dimmed" style={{ display: 'inline-flex', alignItems: 'center', fontWeight: 500 }}>
-                                    #{project.taskNumber}
-                                  </Text>
-                                  <Tooltip label="Копіювати номер">
-                                    <ActionIcon
-                                      variant="subtle"
-                                      color="gray"
-                                      size="xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigator.clipboard.writeText(project.taskNumber || '');
-                                      }}
-                                    >
-                                      <IconCopy size={11} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                </Group>
-                              )}
-                              {project.figmaLink && (
-                                <Group gap={2} align="center">
-                                  <Tooltip label="Відкрити макет Figma">
-                                    <Button
-                                      variant="light"
-                                      color="orange"
-                                      size="xs"
-                                      leftSection={<IconBrandFigma size={10} />}
-                                      style={{ height: '20px', padding: '0 6px', fontSize: '9px' }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (project.figmaLink) window.open(project.figmaLink, '_blank');
-                                      }}
-                                    >
-                                      Figma
-                                    </Button>
-                                  </Tooltip>
-                                  <Tooltip label="Копіювати посилання">
-                                    <ActionIcon
-                                      variant="subtle"
-                                      color="gray"
-                                      size="xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (project.figmaLink) navigator.clipboard.writeText(project.figmaLink);
-                                      }}
-                                    >
-                                      <IconCopy size={11} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                </Group>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Member List */}
-                          <div className="project-members" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '8px' }}>
-                            {projectMembers.map((member) => {
-                              const isBase64Image = member.avatar && (member.avatar.startsWith('data:image/') || member.avatar.startsWith('http') || member.avatar.startsWith('/'));
-                              return (
-                                <Menu 
-                                  key={member.id} 
-                                  shadow="md" 
-                                  width={220} 
-                                  trigger="click" 
-                                  disabled={!isAdmin}
-                                  onClose={() => setMemberSearchQuery('')}
-                                >
-                                  <Menu.Target>
-                                    <Tooltip
-                                      label={
-                                        <div style={{ padding: '2px 4px' }}>
-                                          <Text size="xs" fw={700} c="white">{member.name}</Text>
-                                          <Text size="10px" style={{ color: '#cbd5e1' }}>{member.role}</Text>
-                                        </div>
-                                      }
-                                      position="top"
-                                      withArrow
-                                      multiline
-                                    >
-                                      <div
-                                        className="member-avatar-wrapper"
-                                        style={{
-                                          cursor: isAdmin ? 'pointer' : 'default',
-                                          position: 'relative'
-                                        }}
-                                      >
-                                        <Avatar
-                                          size="sm"
-                                          radius="xl"
-                                          color={member.isDesigner ? 'indigo' : 'gray'}
-                                          src={isBase64Image ? member.avatar : undefined}
-                                          title={member.name}
-                                        >
-                                          {!isBase64Image && member.avatar}
-                                        </Avatar>
-                                      </div>
-                                    </Tooltip>
-                                  </Menu.Target>
-                                  <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                                    <Menu.Label>Замінити виконавця</Menu.Label>
-                                    <div style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
-                                      <TextInput
-                                        placeholder="Пошук..."
-                                        size="xs"
-                                        value={memberSearchQuery}
-                                        onChange={(e) => setMemberSearchQuery(e.currentTarget.value)}
-                                        leftSection={<IconSearch size={12} />}
-                                      />
-                                    </div>
-                                    <Menu.Divider />
-                                    {filteredNonProjectUsers.length === 0 ? (
-                                      <Menu.Item disabled>
-                                        {nonProjectUsers.length === 0 ? 'Немає інших користувачів' : 'Немає результатів пошуку'}
-                                      </Menu.Item>
-                                    ) : (
-                                      filteredNonProjectUsers.map((u) => (
-                                        <Menu.Item
-                                          key={u.id}
-                                          onClick={() => onReplaceProjectMember(project.id, member.id, u.id)}
-                                        >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {(() => {
-                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                              return (
-                                                <Avatar
-                                                  size="xs"
-                                                  radius="xl"
-                                                  src={isBase64 ? u.avatar : undefined}
-                                                >
-                                                  {!isBase64 && u.avatar}
-                                                </Avatar>
-                                              );
-                                            })()}
-                                            <div>
-                                              <Text size="xs" fw={600}>{u.name}</Text>
-                                              <Text size="10px" c="dimmed">{u.role}</Text>
-                                            </div>
-                                          </div>
-                                        </Menu.Item>
-                                      ))
-                                    )}
-                                    <Menu.Divider />
-                                    <Menu.Item
-                                      color="red"
-                                      leftSection={<IconTrash size={14} />}
-                                      onClick={() => onRemoveProjectMember(project.id, member.id)}
-                                    >
-                                      Видалити з проєкту
-                                    </Menu.Item>
-                                  </Menu.Dropdown>
-                                </Menu>
-                              );
-                            })}
-
-                            {isAdmin && (
-                              <Menu 
-                                shadow="md" 
-                                width={220}
-                                onClose={() => setMemberSearchQuery('')}
-                              >
-                                <Menu.Target>
-                                  <ActionIcon 
-                                    variant="light" 
-                                    color="indigo" 
-                                    radius="xl"
-                                    style={{
-                                      width: '26px',
-                                      height: '26px',
-                                      minWidth: '26px',
-                                      minHeight: '26px',
-                                      borderRadius: '50%',
-                                    }}
-                                  >
-                                    <IconUserPlus size={14} />
-                                  </ActionIcon>
-                                </Menu.Target>
-                                <Menu.Dropdown style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                                  <Menu.Label>Додати виконавця</Menu.Label>
-                                  <div style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
-                                    <TextInput
-                                      placeholder="Пошук..."
-                                      size="xs"
-                                      value={memberSearchQuery}
-                                      onChange={(e) => setMemberSearchQuery(e.currentTarget.value)}
-                                      leftSection={<IconSearch size={12} />}
-                                    />
-                                  </div>
-                                  <Menu.Divider />
-                                  {filteredNonProjectUsers.length === 0 ? (
-                                    <Menu.Item disabled>
-                                      {nonProjectUsers.length === 0 ? 'Усі вже додані' : 'Немає результатів пошуку'}
-                                    </Menu.Item>
-                                  ) : (
-                                    filteredNonProjectUsers.map(u => (
-                                      <Menu.Item
-                                        key={u.id}
-                                        onClick={() => onAddProjectMember(project.id, u.id)}
-                                      >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {(() => {
-                                              const isBase64 = u.avatar && (u.avatar.startsWith('data:image/') || u.avatar.startsWith('http') || u.avatar.startsWith('/'));
-                                              return (
-                                                <Avatar
-                                                  size="xs"
-                                                  radius="xl"
-                                                  src={isBase64 ? u.avatar : undefined}
-                                                >
-                                                  {!isBase64 && u.avatar}
-                                                </Avatar>
-                                              );
-                                            })()}
-                                            <div>
-                                              <Text size="xs" fw={600}>{u.name}</Text>
-                                              <Text size="10px" c="dimmed">{u.role}</Text>
-                                            </div>
-                                          </div>
-                                        </Menu.Item>
-                                      ))
-                                  )}
-                                </Menu.Dropdown>
-                              </Menu>
-                            )}
-                          </div>
-
-                          {/* Прогрес-бар виконання проєкту */}
-                          {totalTasksCount === 0 ? (
-                            <div style={{ marginTop: '12px', padding: '4px 8px', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)' }}>
-                              <Text size="10px" c="dimmed" style={{ fontStyle: 'italic', fontWeight: 600, fontFamily: 'var(--font-family)' }}>Задач немає</Text>
-                            </div>
-                          ) : (
-                            <div style={{ position: 'relative', marginTop: '16px', paddingTop: '16px', paddingBottom: '2px' }}>
-                              {/* Floating bubble showing progress */}
-                              {(() => {
-                                const isDoneAll = progressPercent === 100;
-                                const isInProgressAny = progressPercent > 0 && progressPercent < 100;
-
-                                const barColor = isDoneAll ? 'teal' : (isInProgressAny ? 'orange' : 'indigo');
-                                const hexColor = isDoneAll ? '#00bc7c' : (isInProgressAny ? '#f59e0b' : 'var(--primary-color)');
-                                const shadowColor = isDoneAll ? '0 2px 4px rgba(0, 188, 124, 0.25)' : (isInProgressAny ? '0 2px 4px rgba(245, 158, 11, 0.25)' : '0 2px 4px rgba(99, 102, 241, 0.25)');
-                                const haloColor = isDoneAll ? '0 0 0 1px rgba(0, 188, 124, 0.2)' : (isInProgressAny ? '0 0 0 1px rgba(245, 158, 11, 0.2)' : '0 0 0 1px rgba(99, 102, 241, 0.2)');
-
-                                return (
-                                  <>
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        bottom: '16px',
-                                        left: `calc(${progressPercent}% - 14px)`,
-                                        backgroundColor: hexColor,
-                                        color: '#ffffff',
-                                        padding: '1px 5px',
-                                        borderRadius: '6px',
-                                        fontSize: '8px',
-                                        fontWeight: 800,
-                                        whiteSpace: 'nowrap',
-                                        boxShadow: shadowColor,
-                                        transition: 'left 0.3s ease',
-                                        zIndex: 5
-                                      } as React.CSSProperties}
-                                    >
-                                      {progressPercent}%
-                                      <div
-                                        style={{
-                                          position: 'absolute',
-                                          bottom: '-2px',
-                                          left: 'calc(50% - 2px)',
-                                          width: 0,
-                                          height: 0,
-                                          borderStyle: 'solid',
-                                          borderWidth: '2px 2px 0 2px',
-                                          borderColor: hexColor + ' transparent transparent transparent'
-                                        }}
-                                      />
-                                    </div>
-
-                                    <Progress
-                                      value={progressPercent}
-                                      color={barColor}
-                                      size="xs"
-                                      radius="xl"
-                                      style={{
-                                        transition: 'all 0.3s ease',
-                                        backgroundColor: '#e2e8f0'
-                                      }}
-                                    />
-
-                                    {/* Target point indicator */}
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        top: '18px',
-                                        left: `calc(${progressPercent}% - 3px)`,
-                                        width: '6px',
-                                        height: '6px',
-                                        borderRadius: '50%',
-                                        backgroundColor: '#ffffff',
-                                        border: `2px solid ${hexColor}`,
-                                        boxShadow: haloColor,
-                                        transition: 'left 0.3s ease',
-                                        zIndex: 4
-                                      }}
-                                    />
-                                  </>
-                                );
-                              })()}
-
-                              <Text size="9px" c="dimmed" mt="2px" style={{ textAlign: 'right', fontWeight: 600 }}>
-                                {doneTasksCount}/{totalTasksCount} виконано
-                              </Text>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Right Cell: Days Grid & Allocations overlay */}
-                        <div 
-                          className="calendar-days-cell"
-                          style={{ 
-                            minHeight: `${Math.max(140, lanes.length * 56 + 24)}px`,
+                        <div
+                          className="project-info-cell"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                            justifyContent: "center",
+                            height: "140px",
                           }}
                         >
-                          {days.map((day, dIdx) => {
-                            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                            return (
-                              <div
-                                key={day.toISOString()}
-                                className={`day-grid-column ${isWeekend ? 'is-weekend' : ''}`}
-                                onMouseDown={(e) => handleCellMouseDown(e, project.id, dIdx)}
-                                style={{
-                                  cursor: isAdmin ? 'crosshair' : 'default',
-                                }}
-                              />
-                            );
-                          })}
-
-                          {/* Allocations layer */}
-                          <div className="allocations-overlay">
-                            {lanes.map((lane, laneIdx) => (
-                              <div key={laneIdx} className="allocation-lane">
-                                {lane.map((allocation) => (
-                                  <AllocationBar
-                                    key={allocation.id}
-                                    allocation={allocation}
-                                    project={project}
-                                    designers={projectDesigners}
-                                    days={days}
-                                    allocations={allocations}
-                                    onUpdateAllocation={onUpdateAllocation}
-                                    onDeleteAllocation={onDeleteAllocation}
-                                    isAdmin={isAdmin}
-                                    isSelected={selectedAllocationIds.includes(allocation.id)}
-                                  />
-                                ))}
-                              </div>
-                            ))}
-                          </div>
+                          <Skeleton
+                            height={20}
+                            width="60%"
+                            radius="sm"
+                            animate
+                          />
+                          <Skeleton
+                            height={28}
+                            width="40%"
+                            radius="xl"
+                            animate
+                          />
+                        </div>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            borderBottom: "1px solid var(--border-color)",
+                            display: "flex",
+                            alignItems: "center",
+                            padding: "0 24px",
+                            height: "140px",
+                          }}
+                        >
+                          <Skeleton
+                            height={40}
+                            style={{ width: "100%" }}
+                            radius="md"
+                            animate
+                          />
                         </div>
                       </div>
-                    )}
-                  </Draggable>
-                );
-              })
-            )}
-              {provided.placeholder}
-            </div>
-          );
-        }}
+                    ))
+                  : visibleProjects.map((project, idx) => {
+                      const projectMembers = users.filter((u) =>
+                        project.memberIds.includes(u.id),
+                      );
+                      const projectDesigners = projectMembers.filter(
+                        (u) => u.isDesigner,
+                      );
+                      const nonProjectUsers = users.filter(
+                        (u) => !project.memberIds.includes(u.id),
+                      );
+                      const filteredNonProjectUsers = nonProjectUsers.filter(
+                        (u) => {
+                          const q = memberSearchQuery.toLowerCase().trim();
+                          if (!q) return true;
+                          return (
+                            u.name.toLowerCase().includes(q) ||
+                            u.role.toLowerCase().includes(q)
+                          );
+                        },
+                      );
+                      const startOfWeekStr = formatDateString(days[0]);
+                      const endOfWeekStr = formatDateString(
+                        days[days.length - 1],
+                      );
+
+                      // Расчет прогресса задач проекта
+                      const projectTasks = tasks.filter(
+                        (t) => t.projectId === project.id,
+                      );
+                      const doneColumnIds = columns
+                        .filter(
+                          (col) => col.isDone === 1 || col.isDone === true,
+                        )
+                        .map((col) => col.id);
+                      const doneTasks = projectTasks.filter((t) =>
+                        doneColumnIds.includes(t.columnId),
+                      );
+                      const totalTasksCount = projectTasks.length;
+                      const doneTasksCount = doneTasks.length;
+                      const progressPercent =
+                        totalTasksCount > 0
+                          ? Math.round((doneTasksCount / totalTasksCount) * 100)
+                          : 0;
+
+                      // Compute lanes for this project
+                      const projectAllocations = allocations.filter((a) => {
+                        return (
+                          a.projectId === project.id &&
+                          a.startDate <= endOfWeekStr &&
+                          a.endDate >= startOfWeekStr
+                        );
+                      });
+                      const lanes = computeLanes(projectAllocations);
+
+                      return (
+                        <Draggable
+                          key={project.id}
+                          draggableId={project.id}
+                          index={idx}
+                          isDragDisabled={!isAdmin}
+                        >
+                          {(draggableProvided, snapshot) => (
+                            <div
+                              ref={draggableProvided.innerRef}
+                              {...draggableProvided.draggableProps}
+                              className={`project-row ${snapshot.isDragging ? "is-dragging" : ""}`}
+                            >
+                              {/* Left Cell: Project Name & Members */}
+                              <div
+                                className="project-info-cell"
+                                style={{ position: "relative" }}
+                              >
+                                {/* Color Badge Capsule */}
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    left: 0,
+                                    top: "50%",
+                                    transform: "translateY(-50%)",
+                                    width: "5px",
+                                    height: "60px",
+                                    borderRadius: "0 9px 9px 0",
+                                    backgroundColor: resolveProjectColor(
+                                      project.color,
+                                    ),
+                                    zIndex: 10,
+                                  }}
+                                />
+
+                                <div
+                                  className="project-title-container"
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <span
+                                    {...draggableProvided.dragHandleProps}
+                                    className="project-drag-number"
+                                    title={
+                                      isAdmin
+                                        ? "Перетягніть для зміни приоритету"
+                                        : undefined
+                                    }
+                                    style={{
+                                      cursor: isAdmin ? "ns-resize" : "default",
+                                      fontWeight: 700,
+                                      fontSize: "12px",
+                                      color: "var(--text-muted)",
+                                      marginRight: "8px",
+                                      userSelect: "none",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      padding: "2px 6px",
+                                      borderRadius: "4px",
+                                      backgroundColor:
+                                        "rgba(99, 102, 241, 0.08)",
+                                      border:
+                                        "1px solid rgba(99, 102, 241, 0.15)",
+                                      transition: "all 0.2s",
+                                    }}
+                                  >
+                                    {idx + 1}
+                                  </span>
+
+                                  <input
+                                    type="text"
+                                    className="project-name-input"
+                                    value={project.name}
+                                    onChange={(e) =>
+                                      onUpdateProjectName(
+                                        project.id,
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Введіть назву проєкту"
+                                    readOnly={!isAdmin}
+                                    style={{
+                                      cursor: isAdmin ? "text" : "default",
+                                      background: "transparent",
+                                      flexGrow: 1,
+                                    }}
+                                  />
+
+                                  {isAdmin && (
+                                    <Menu
+                                      shadow="md"
+                                      width={200}
+                                      position="right-start"
+                                    >
+                                      <Menu.Target>
+                                        <ActionIcon
+                                          variant="subtle"
+                                          color="gray"
+                                          size="sm"
+                                        >
+                                          <IconDotsVertical size={16} />
+                                        </ActionIcon>
+                                      </Menu.Target>
+                                      <Menu.Dropdown>
+                                        <Menu.Label>
+                                          Керування проєктом
+                                        </Menu.Label>
+                                        <Menu.Item
+                                          leftSection={<IconPencil size={14} />}
+                                          onClick={() =>
+                                            handleStartEditProject(project)
+                                          }
+                                        >
+                                          Редагувати проєкт
+                                        </Menu.Item>
+                                        <Menu.Item
+                                          color="red"
+                                          leftSection={<IconTrash size={14} />}
+                                          onClick={() => {
+                                            onDeleteProject(project.id);
+                                          }}
+                                        >
+                                          Видалити проєкт
+                                        </Menu.Item>
+                                      </Menu.Dropdown>
+                                    </Menu>
+                                  )}
+                                </div>
+
+                                {/* Project Metadata: Task Number and Figma Link */}
+                                {(project.taskNumber || project.figmaLink) && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "8px",
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                      marginTop: "-8px",
+                                    }}
+                                  >
+                                    {project.taskNumber && (
+                                      <Group
+                                        gap={2}
+                                        align="center"
+                                        style={{
+                                          cursor: isAdmin
+                                            ? "pointer"
+                                            : "default",
+                                        }}
+                                        onClick={() =>
+                                          isAdmin &&
+                                          handleStartEditProject(project)
+                                        }
+                                      >
+                                        <Text
+                                          size="11px"
+                                          c="dimmed"
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            fontWeight: 500,
+                                          }}
+                                        >
+                                          #{project.taskNumber}
+                                        </Text>
+                                        <Tooltip label="Копіювати номер">
+                                          <ActionIcon
+                                            variant="subtle"
+                                            color="gray"
+                                            size="xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigator.clipboard.writeText(
+                                                project.taskNumber || "",
+                                              );
+                                            }}
+                                          >
+                                            <IconCopy size={11} />
+                                          </ActionIcon>
+                                        </Tooltip>
+                                      </Group>
+                                    )}
+                                    {project.figmaLink && (
+                                      <Group gap={2} align="center">
+                                        <Tooltip label="Відкрити макет Figma">
+                                          <Button
+                                            variant="light"
+                                            color="orange"
+                                            size="xs"
+                                            leftSection={
+                                              <IconBrandFigma size={10} />
+                                            }
+                                            style={{
+                                              height: "20px",
+                                              padding: "0 6px",
+                                              fontSize: "9px",
+                                            }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (project.figmaLink)
+                                                window.open(
+                                                  project.figmaLink,
+                                                  "_blank",
+                                                );
+                                            }}
+                                          >
+                                            Figma
+                                          </Button>
+                                        </Tooltip>
+                                        <Tooltip label="Копіювати посилання">
+                                          <ActionIcon
+                                            variant="subtle"
+                                            color="gray"
+                                            size="xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (project.figmaLink)
+                                                navigator.clipboard.writeText(
+                                                  project.figmaLink,
+                                                );
+                                            }}
+                                          >
+                                            <IconCopy size={11} />
+                                          </ActionIcon>
+                                        </Tooltip>
+                                      </Group>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Member List */}
+                                <div
+                                  className="project-members"
+                                  style={{
+                                    display: "flex",
+                                    gap: "4px",
+                                    flexWrap: "wrap",
+                                    marginTop: "8px",
+                                  }}
+                                >
+                                  {projectMembers.map((member) => {
+                                    const isBase64Image =
+                                      member.avatar &&
+                                      (member.avatar.startsWith(
+                                        "data:image/",
+                                      ) ||
+                                        member.avatar.startsWith("http") ||
+                                        member.avatar.startsWith("/"));
+                                    return (
+                                      <Menu
+                                        key={member.id}
+                                        shadow="md"
+                                        width={220}
+                                        trigger="click"
+                                        disabled={!isAdmin}
+                                        onClose={() => setMemberSearchQuery("")}
+                                      >
+                                        <Menu.Target>
+                                          <Tooltip
+                                            label={
+                                              <div
+                                                style={{ padding: "2px 4px" }}
+                                              >
+                                                <Text
+                                                  size="xs"
+                                                  fw={700}
+                                                  c="white"
+                                                >
+                                                  {member.name}
+                                                </Text>
+                                                <Text
+                                                  size="10px"
+                                                  style={{ color: "#cbd5e1" }}
+                                                >
+                                                  {member.role}
+                                                </Text>
+                                              </div>
+                                            }
+                                            position="top"
+                                            withArrow
+                                            multiline
+                                          >
+                                            <div
+                                              className="member-avatar-wrapper"
+                                              style={{
+                                                cursor: isAdmin
+                                                  ? "pointer"
+                                                  : "default",
+                                                position: "relative",
+                                              }}
+                                            >
+                                              <Avatar
+                                                size="sm"
+                                                radius="xl"
+                                                color={
+                                                  member.isDesigner
+                                                    ? "indigo"
+                                                    : "gray"
+                                                }
+                                                src={
+                                                  isBase64Image
+                                                    ? member.avatar
+                                                    : undefined
+                                                }
+                                                title={member.name}
+                                              >
+                                                {!isBase64Image &&
+                                                  member.avatar}
+                                              </Avatar>
+                                            </div>
+                                          </Tooltip>
+                                        </Menu.Target>
+                                        <Menu.Dropdown
+                                          style={{
+                                            maxHeight: "400px",
+                                            overflowY: "auto",
+                                          }}
+                                        >
+                                          <Menu.Label>
+                                            Замінити виконавця
+                                          </Menu.Label>
+                                          <div
+                                            style={{ padding: "4px 8px" }}
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <TextInput
+                                              placeholder="Пошук..."
+                                              size="xs"
+                                              value={memberSearchQuery}
+                                              onChange={(e) =>
+                                                setMemberSearchQuery(
+                                                  e.currentTarget.value,
+                                                )
+                                              }
+                                              leftSection={
+                                                <IconSearch size={12} />
+                                              }
+                                            />
+                                          </div>
+                                          <Menu.Divider />
+                                          {filteredNonProjectUsers.length ===
+                                          0 ? (
+                                            <Menu.Item disabled>
+                                              {nonProjectUsers.length === 0
+                                                ? "Немає інших користувачів"
+                                                : "Немає результатів пошуку"}
+                                            </Menu.Item>
+                                          ) : (
+                                            filteredNonProjectUsers.map((u) => (
+                                              <Menu.Item
+                                                key={u.id}
+                                                onClick={() =>
+                                                  onReplaceProjectMember(
+                                                    project.id,
+                                                    member.id,
+                                                    u.id,
+                                                  )
+                                                }
+                                              >
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                  }}
+                                                >
+                                                  {(() => {
+                                                    const isBase64 =
+                                                      u.avatar &&
+                                                      (u.avatar.startsWith(
+                                                        "data:image/",
+                                                      ) ||
+                                                        u.avatar.startsWith(
+                                                          "http",
+                                                        ) ||
+                                                        u.avatar.startsWith(
+                                                          "/",
+                                                        ));
+                                                    return (
+                                                      <Avatar
+                                                        size="xs"
+                                                        radius="xl"
+                                                        src={
+                                                          isBase64
+                                                            ? u.avatar
+                                                            : undefined
+                                                        }
+                                                      >
+                                                        {!isBase64 && u.avatar}
+                                                      </Avatar>
+                                                    );
+                                                  })()}
+                                                  <div>
+                                                    <Text size="xs" fw={600}>
+                                                      {u.name}
+                                                    </Text>
+                                                    <Text
+                                                      size="10px"
+                                                      c="dimmed"
+                                                    >
+                                                      {u.role}
+                                                    </Text>
+                                                  </div>
+                                                </div>
+                                              </Menu.Item>
+                                            ))
+                                          )}
+                                          <Menu.Divider />
+                                          <Menu.Item
+                                            color="red"
+                                            leftSection={
+                                              <IconTrash size={14} />
+                                            }
+                                            onClick={() =>
+                                              onRemoveProjectMember(
+                                                project.id,
+                                                member.id,
+                                              )
+                                            }
+                                          >
+                                            Видалити з проєкту
+                                          </Menu.Item>
+                                        </Menu.Dropdown>
+                                      </Menu>
+                                    );
+                                  })}
+
+                                  {isAdmin && (
+                                    <Menu
+                                      shadow="md"
+                                      width={220}
+                                      onClose={() => setMemberSearchQuery("")}
+                                    >
+                                      <Menu.Target>
+                                        <ActionIcon
+                                          variant="light"
+                                          color="indigo"
+                                          radius="xl"
+                                          style={{
+                                            width: "26px",
+                                            height: "26px",
+                                            minWidth: "26px",
+                                            minHeight: "26px",
+                                            borderRadius: "50%",
+                                          }}
+                                        >
+                                          <IconUserPlus size={14} />
+                                        </ActionIcon>
+                                      </Menu.Target>
+                                      <Menu.Dropdown
+                                        style={{
+                                          maxHeight: "400px",
+                                          overflowY: "auto",
+                                        }}
+                                      >
+                                        <Menu.Label>
+                                          Додати виконавця
+                                        </Menu.Label>
+                                        <div
+                                          style={{ padding: "4px 8px" }}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <TextInput
+                                            placeholder="Пошук..."
+                                            size="xs"
+                                            value={memberSearchQuery}
+                                            onChange={(e) =>
+                                              setMemberSearchQuery(
+                                                e.currentTarget.value,
+                                              )
+                                            }
+                                            leftSection={
+                                              <IconSearch size={12} />
+                                            }
+                                          />
+                                        </div>
+                                        <Menu.Divider />
+                                        {filteredNonProjectUsers.length ===
+                                        0 ? (
+                                          <Menu.Item disabled>
+                                            {nonProjectUsers.length === 0
+                                              ? "Усі вже додані"
+                                              : "Немає результатів пошуку"}
+                                          </Menu.Item>
+                                        ) : (
+                                          filteredNonProjectUsers.map((u) => (
+                                            <Menu.Item
+                                              key={u.id}
+                                              onClick={() =>
+                                                onAddProjectMember(
+                                                  project.id,
+                                                  u.id,
+                                                )
+                                              }
+                                            >
+                                              <div
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: "8px",
+                                                }}
+                                              >
+                                                {(() => {
+                                                  const isBase64 =
+                                                    u.avatar &&
+                                                    (u.avatar.startsWith(
+                                                      "data:image/",
+                                                    ) ||
+                                                      u.avatar.startsWith(
+                                                        "http",
+                                                      ) ||
+                                                      u.avatar.startsWith("/"));
+                                                  return (
+                                                    <Avatar
+                                                      size="xs"
+                                                      radius="xl"
+                                                      src={
+                                                        isBase64
+                                                          ? u.avatar
+                                                          : undefined
+                                                      }
+                                                    >
+                                                      {!isBase64 && u.avatar}
+                                                    </Avatar>
+                                                  );
+                                                })()}
+                                                <div>
+                                                  <Text size="xs" fw={600}>
+                                                    {u.name}
+                                                  </Text>
+                                                  <Text size="10px" c="dimmed">
+                                                    {u.role}
+                                                  </Text>
+                                                </div>
+                                              </div>
+                                            </Menu.Item>
+                                          ))
+                                        )}
+                                      </Menu.Dropdown>
+                                    </Menu>
+                                  )}
+                                </div>
+
+                                {/* Прогрес-бар виконання проєкту */}
+                                {totalTasksCount === 0 ? (
+                                  <div
+                                    style={{
+                                      marginTop: "12px",
+                                      padding: "4px 8px",
+                                      borderRadius: "8px",
+                                      backgroundColor: "#f8fafc",
+                                      border: "1px solid var(--border-color)",
+                                    }}
+                                  >
+                                    <Text
+                                      size="10px"
+                                      c="dimmed"
+                                      style={{
+                                        fontStyle: "italic",
+                                        fontWeight: 600,
+                                        fontFamily: "var(--font-family)",
+                                      }}
+                                    >
+                                      Задач немає
+                                    </Text>
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      position: "relative",
+                                      marginTop: "16px",
+                                      paddingTop: "16px",
+                                      paddingBottom: "2px",
+                                    }}
+                                  >
+                                    {/* Floating bubble showing progress */}
+                                    {(() => {
+                                      const isDoneAll = progressPercent === 100;
+                                      const isInProgressAny =
+                                        progressPercent > 0 &&
+                                        progressPercent < 100;
+
+                                      const barColor = isDoneAll
+                                        ? "teal"
+                                        : isInProgressAny
+                                          ? "orange"
+                                          : "indigo";
+                                      const hexColor = isDoneAll
+                                        ? "#00bc7c"
+                                        : isInProgressAny
+                                          ? "#f59e0b"
+                                          : "var(--primary-color)";
+                                      const shadowColor = isDoneAll
+                                        ? "0 2px 4px rgba(0, 188, 124, 0.25)"
+                                        : isInProgressAny
+                                          ? "0 2px 4px rgba(245, 158, 11, 0.25)"
+                                          : "0 2px 4px rgba(99, 102, 241, 0.25)";
+                                      const haloColor = isDoneAll
+                                        ? "0 0 0 1px rgba(0, 188, 124, 0.2)"
+                                        : isInProgressAny
+                                          ? "0 0 0 1px rgba(245, 158, 11, 0.2)"
+                                          : "0 0 0 1px rgba(99, 102, 241, 0.2)";
+
+                                      return (
+                                        <>
+                                          <div
+                                            style={
+                                              {
+                                                position: "absolute",
+                                                bottom: "16px",
+                                                left: `calc(${progressPercent}% - 14px)`,
+                                                backgroundColor: hexColor,
+                                                color: "#ffffff",
+                                                padding: "1px 5px",
+                                                borderRadius: "6px",
+                                                fontSize: "8px",
+                                                fontWeight: 800,
+                                                whiteSpace: "nowrap",
+                                                boxShadow: shadowColor,
+                                                transition: "left 0.3s ease",
+                                                zIndex: 5,
+                                              } as React.CSSProperties
+                                            }
+                                          >
+                                            {progressPercent}%
+                                            <div
+                                              style={{
+                                                position: "absolute",
+                                                bottom: "-2px",
+                                                left: "calc(50% - 2px)",
+                                                width: 0,
+                                                height: 0,
+                                                borderStyle: "solid",
+                                                borderWidth: "2px 2px 0 2px",
+                                                borderColor:
+                                                  hexColor +
+                                                  " transparent transparent transparent",
+                                              }}
+                                            />
+                                          </div>
+
+                                          <Progress
+                                            value={progressPercent}
+                                            color={barColor}
+                                            size="xs"
+                                            radius="xl"
+                                            style={{
+                                              transition: "all 0.3s ease",
+                                              backgroundColor: "#e2e8f0",
+                                            }}
+                                          />
+
+                                          {/* Target point indicator */}
+                                          <div
+                                            style={{
+                                              position: "absolute",
+                                              top: "18px",
+                                              left: `calc(${progressPercent}% - 3px)`,
+                                              width: "6px",
+                                              height: "6px",
+                                              borderRadius: "50%",
+                                              backgroundColor: "#ffffff",
+                                              border: `2px solid ${hexColor}`,
+                                              boxShadow: haloColor,
+                                              transition: "left 0.3s ease",
+                                              zIndex: 4,
+                                            }}
+                                          />
+                                        </>
+                                      );
+                                    })()}
+
+                                    <Text
+                                      size="9px"
+                                      c="dimmed"
+                                      mt="2px"
+                                      style={{
+                                        textAlign: "right",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {doneTasksCount}/{totalTasksCount}{" "}
+                                      виконано
+                                    </Text>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Right Cell: Days Grid & Allocations overlay */}
+                              <div
+                                className="calendar-days-cell"
+                                style={{
+                                  minHeight: `${Math.max(140, lanes.length * 56 + 24)}px`,
+                                }}
+                              >
+                                {days.map((day, dIdx) => {
+                                  const isWeekend =
+                                    day.getDay() === 0 || day.getDay() === 6;
+                                  return (
+                                    <div
+                                      key={day.toISOString()}
+                                      className={`day-grid-column ${isWeekend ? "is-weekend" : ""}`}
+                                      onMouseDown={(e) =>
+                                        handleCellMouseDown(e, project.id, dIdx)
+                                      }
+                                      style={{
+                                        cursor: isAdmin
+                                          ? "crosshair"
+                                          : "default",
+                                      }}
+                                    />
+                                  );
+                                })}
+
+                                {/* Allocations layer */}
+                                <div className="allocations-overlay">
+                                  {lanes.map((lane, laneIdx) => (
+                                    <div
+                                      key={laneIdx}
+                                      className="allocation-lane"
+                                    >
+                                      {lane.map((allocation) => (
+                                        <AllocationBar
+                                          key={allocation.id}
+                                          allocation={allocation}
+                                          project={project}
+                                          designers={projectDesigners}
+                                          days={days}
+                                          allocations={allocations}
+                                          onUpdateAllocation={
+                                            onUpdateAllocation
+                                          }
+                                          onDeleteAllocation={
+                                            onDeleteAllocation
+                                          }
+                                          isAdmin={isAdmin}
+                                          isSelected={selectedAllocationIds.includes(
+                                            allocation.id,
+                                          )}
+                                        />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                {provided.placeholder}
+              </div>
+            );
+          }}
         </Droppable>
       </DragDropContext>
 
@@ -1082,16 +1516,16 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         <div
           className="selection-box"
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: Math.min(selectionBox.startX, selectionBox.currentX),
             top: Math.min(selectionBox.startY, selectionBox.currentY),
             width: Math.abs(selectionBox.startX - selectionBox.currentX),
             height: Math.abs(selectionBox.startY - selectionBox.currentY),
-            border: '1px dashed #6366f1',
-            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            border: "1px dashed #6366f1",
+            backgroundColor: "rgba(99, 102, 241, 0.12)",
             zIndex: 9999,
-            pointerEvents: 'none',
-            borderRadius: '4px',
+            pointerEvents: "none",
+            borderRadius: "4px",
           }}
         />
       )}
@@ -1099,7 +1533,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       {/* Floating Selection Actions Bar */}
       {selectedAllocationIds.length > 0 && (
         <div className="selection-actions-bar">
-          <Text size="sm" fw={600}>Вибрано елементів: {selectedAllocationIds.length}</Text>
+          <Text size="sm" fw={600}>
+            Вибрано елементів: {selectedAllocationIds.length}
+          </Text>
           <Group gap="xs">
             <Button
               color="red"
@@ -1129,9 +1565,16 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         centered
       >
         <Stack>
-          <Text size="sm">Ви впевнені, що хочете видалити {selectedAllocationIds.length} вибраних прогресс-барів?</Text>
+          <Text size="sm">
+            Ви впевнені, що хочете видалити {selectedAllocationIds.length}{" "}
+            вибраних прогресс-барів?
+          </Text>
           <Group justify="flex-end" mt="md">
-            <Button variant="subtle" color="gray" onClick={() => setDeleteModalOpened(false)}>
+            <Button
+              variant="subtle"
+              color="gray"
+              onClick={() => setDeleteModalOpened(false)}
+            >
               Скасувати
             </Button>
             <Button color="red" onClick={handleConfirmDelete}>
@@ -1151,7 +1594,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         title={
           <Group gap="xs">
             <IconNotebook size={20} color="var(--primary-color)" />
-            <Text fw={800} size="md">Редагування проєкту</Text>
+            <Text fw={800} size="md">
+              Редагування проєкту
+            </Text>
           </Group>
         }
         centered
@@ -1169,63 +1614,83 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 required
               />
 
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 120px", minWidth: "120px" }}>
                   <ColorInput
                     label="Колір проєкту"
                     value={editProjColor}
                     onChange={setEditProjColor}
-                    swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
+                    swatches={[
+                      "#6366f1",
+                      "#10b981",
+                      "#f59e0b",
+                      "#ef4444",
+                      "#ec4899",
+                      "#06b6d4",
+                      "#8b5cf6",
+                    ]}
                     required
                   />
                 </div>
-                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                <div style={{ flex: "1 1 120px", minWidth: "120px" }}>
                   <TextInput
                     label="Номер задачі"
                     placeholder="Наприклад: 12345"
                     value={editProjTaskNumber}
-                    onChange={(e) => setEditProjTaskNumber(e.currentTarget.value)}
+                    onChange={(e) =>
+                      setEditProjTaskNumber(e.currentTarget.value)
+                    }
                   />
                 </div>
-                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                <div style={{ flex: "1 1 120px", minWidth: "120px" }}>
                   <TextInput
                     label="Посилання на макет"
                     placeholder="Figma посилання"
                     value={editProjFigmaLink}
-                    onChange={(e) => setEditProjFigmaLink(e.currentTarget.value)}
+                    onChange={(e) =>
+                      setEditProjFigmaLink(e.currentTarget.value)
+                    }
                   />
                 </div>
               </div>
 
-              <Divider my="xs" label="УЧАСНИКИ ПРОЄКТУ" labelPosition="center" />
+              <Divider
+                my="xs"
+                label="УЧАСНИКИ ПРОЄКТУ"
+                labelPosition="center"
+              />
               <Text size="xs" c="dimmed">
                 Виберіть дизайнерів, які будуть задіяні на цьому проєкті:
               </Text>
 
-              <Stack gap="xs" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                {users.filter(u => u.isDesigner).map((user) => {
-                  const isSelected = editProjMembers.includes(user.id);
-                  return (
-                    <Checkbox
-                      key={user.id}
-                      label={user.name}
-                      checked={isSelected}
-                      onChange={(e) => {
-                        if (e.currentTarget.checked) {
-                          setEditProjMembers((prev) => [...prev, user.id]);
-                        } else {
-                          setEditProjMembers((prev) => prev.filter((id) => id !== user.id));
-                        }
-                      }}
-                    />
-                  );
-                })}
+              <Stack gap="xs" style={{ maxHeight: "180px", overflowY: "auto" }}>
+                {users
+                  .filter((u) => u.isDesigner)
+                  .map((user) => {
+                    const isSelected = editProjMembers.includes(user.id);
+                    return (
+                      <Checkbox
+                        key={user.id}
+                        label={user.name}
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.currentTarget.checked) {
+                            setEditProjMembers((prev) => [...prev, user.id]);
+                          } else {
+                            setEditProjMembers((prev) =>
+                              prev.filter((id) => id !== user.id),
+                            );
+                          }
+                        }}
+                      />
+                    );
+                  })}
               </Stack>
 
               <Group justify="flex-end" gap="xs" mt="md">
-                <Button 
-                  variant="subtle" 
-                  color="gray" 
+                <Button
+                  variant="subtle"
+                  color="gray"
                   onClick={() => {
                     setEditProjectModalOpened(false);
                     setEditingProject(null);
