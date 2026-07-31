@@ -15,7 +15,7 @@ import {
   TextInput,
   PasswordInput,
 } from "@mantine/core";
-import type { User, Project, Allocation, Space } from "./types";
+import type { User, Project, Allocation, Space, ProjectOrder } from "./types";
 import { DesignerHeader } from "./components/DesignerHeader";
 import { CalendarGrid } from "./components/CalendarGrid";
 import { AddProjectRow } from "./components/AddProjectRow";
@@ -424,6 +424,7 @@ export const App: React.FC = () => {
   // --- Persistent States synced with SQLite ---
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOrders, setProjectOrders] = useState<ProjectOrder[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [designerCapacities, setDesignerCapacities] = useState<
     Record<string, number>
@@ -541,6 +542,7 @@ export const App: React.FC = () => {
         setProjects(data.projects || []);
         setAllocations(data.allocations || []);
         setDesignerCapacities(data.capacities || {});
+        setProjectOrders(data.projectOrders || []);
 
         const loadedSpaces = data.spaces || [];
         setSpaces(loadedSpaces);
@@ -975,12 +977,28 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleSaveProjectsOrder = (orderedIds: string[]) => {
+  const handleSaveProjectsOrder = (orderedIds: string[], weekStartStr: string) => {
     fetch("/api/projects/order", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: orderedIds }),
-    }).catch((err) => console.error("Error saving projects order:", err));
+      body: JSON.stringify({ ids: orderedIds, weekStart: weekStartStr }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          setProjectOrders((prev) => {
+            const filtered = prev.filter(
+              (po) => po.weekStart !== weekStartStr
+            );
+            const newOrders = orderedIds.map((projectId, idx) => ({
+              projectId,
+              weekStart: weekStartStr,
+              sortOrder: idx,
+            }));
+            return [...filtered, ...newOrders];
+          });
+        }
+      })
+      .catch((err) => console.error("Error saving projects order:", err));
   };
 
   // --- Spaces CRUD Handlers ---
@@ -1721,6 +1739,7 @@ export const App: React.FC = () => {
                 columns={columns}
                 tasks={filteredTasksForActiveWeek}
                 onAddProject={handleAddProject}
+                projectOrders={projectOrders}
               />
 
               {/* Add Project Bar - Hidden if not Admin */}

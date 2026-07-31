@@ -250,6 +250,26 @@ async function initializeDb() {
       console.error('Error creating task_images table in initializeDb:', e);
     }
 
+    try {
+      if (isPostgres) {
+        await executeQuery(`CREATE TABLE IF NOT EXISTS project_orders (
+          projectid TEXT,
+          weekstart TEXT,
+          sortorder INTEGER,
+          PRIMARY KEY (projectid, weekstart)
+        )`);
+      } else {
+        await executeQuery(`CREATE TABLE IF NOT EXISTS project_orders (
+          projectId TEXT,
+          weekStart TEXT,
+          sortOrder INTEGER,
+          PRIMARY KEY (projectId, weekStart)
+        )`);
+      }
+    } catch (e) {
+      console.error('Error creating project_orders table in initializeDb:', e);
+    }
+
     // Check and seed users if empty
     const userRows = await executeQuery('SELECT COUNT(*) as count FROM users');
     const userCount = userRows && userRows[0] ? parseInt(userRows[0].count || userRows[0].COUNT || Object.values(userRows[0])[0] || 0, 10) : 0;
@@ -415,6 +435,7 @@ app.get('/api/data', async (req, res) => {
     const rawAllocations = await executeQuery('SELECT * FROM allocations');
     const rawCapacities = await executeQuery('SELECT * FROM capacities');
     const rawSpaces = await executeQuery('SELECT * FROM spaces');
+    const rawProjectOrders = await executeQuery('SELECT * FROM project_orders');
 
     // Parse structures
     const users = rawUsers.map((u) => ({
@@ -443,6 +464,12 @@ app.get('/api/data', async (req, res) => {
       capacities[c.designerid || c.designerId] = c.dailycapacity || c.dailyCapacity;
     });
 
+    const projectOrders = (rawProjectOrders || []).map((po) => ({
+      projectId: po.projectid !== undefined ? po.projectid : po.projectId,
+      weekStart: po.weekstart !== undefined ? po.weekstart : po.weekStart,
+      sortOrder: po.sortorder !== undefined ? po.sortorder : po.sortOrder
+    }));
+
     res.json({
       users,
       projects,
@@ -456,7 +483,8 @@ app.get('/api/data', async (req, res) => {
         hours: Number(a.hours),
         offsetHours: Number(a.offsethours || a.offsetHours || 0)
       })),
-      capacities
+      capacities,
+      projectOrders
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -880,13 +908,34 @@ app.delete('/api/spaces/:id', async (req, res) => {
 
 // Update projects sort order
 app.put('/api/projects/order', async (req, res) => {
-  const { ids } = req.body;
+  const { ids, weekStart } = req.body;
   if (!ids || !Array.isArray(ids)) {
     return res.status(400).json({ error: 'Некоректні IDs' });
   }
   try {
-    for (let i = 0; i < ids.length; i++) {
-      await executeQuery('UPDATE projects SET sortOrder = ? WHERE id = ?', [i, ids[i]]);
+    if (weekStart) {
+      for (let i = 0; i < ids.length; i++) {
+        const projectId = ids[i];
+        if (isPostgres) {
+          await executeQuery(
+            `INSERT INTO project_orders (projectid, weekstart, sortorder) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (projectid, weekstart) 
+             DO UPDATE SET sortorder = EXCLUDED.sortorder`,
+            [projectId, weekStart, i]
+          );
+        } else {
+          await executeQuery(
+            `INSERT OR REPLACE INTO project_orders (projectId, weekStart, sortOrder) 
+             VALUES (?, ?, ?)`,
+            [projectId, weekStart, i]
+          );
+        }
+      }
+    } else {
+      for (let i = 0; i < ids.length; i++) {
+        await executeQuery('UPDATE projects SET sortOrder = ? WHERE id = ?', [i, ids[i]]);
+      }
     }
     res.json({ success: true, message: 'Порядок проектів успішно збережено' });
   } catch (err) {

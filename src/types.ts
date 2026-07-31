@@ -16,6 +16,7 @@ export interface Project {
   isArchived?: boolean;
   taskNumber?: string;
   figmaLink?: string;
+  sortOrder?: number;
 }
 
 export interface Allocation {
@@ -43,4 +44,10 @@ export interface Space {
   name: string;
   memberIds: string[];
   autoTransferIncomplete?: boolean | number;
+}
+
+export interface ProjectOrder {
+  projectId: string;
+  weekStart: string;
+  sortOrder: number;
 }

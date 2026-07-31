@@ -27,7 +27,7 @@ import {
   IconNotebook,
 } from "@tabler/icons-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import type { User, Project, Allocation } from "../types";
+import type { User, Project, Allocation, ProjectOrder } from "../types";
 import { AllocationBar } from "./AllocationBar";
 import { validateAllocation } from "../App";
 
@@ -114,7 +114,7 @@ interface CalendarGridProps {
   ) => void;
   onDeleteAllocation: (id: string) => void;
   onUpdateProjectsList: (newList: Project[]) => void;
-  onSaveProjectsOrder: (orderedIds: string[]) => void;
+  onSaveProjectsOrder: (orderedIds: string[], weekStart: string) => void;
   isAdmin: boolean;
   loading?: boolean;
   columns?: any[];
@@ -127,6 +127,7 @@ interface CalendarGridProps {
     taskNumber?: string,
     figmaLink?: string,
   ) => void;
+  projectOrders?: ProjectOrder[];
 }
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -150,6 +151,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   columns = [],
   tasks = [],
   onAddProject,
+  projectOrders = [],
 }) => {
   // Drag selection state
   const [selectionBox, setSelectionBox] = useState<{
@@ -448,16 +450,52 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const toIdx = result.destination.index;
     if (fromIdx === toIdx) return;
 
-    const list = [...projects];
-    const [moved] = list.splice(fromIdx, 1);
-    list.splice(toIdx, 0, moved);
+    const startOfWeekStrVal = formatDateString(days[0]);
+    const endOfWeekStrVal = formatDateString(days[days.length - 1]);
+
+    const visibleList = projects.filter((project) => {
+      if (!project.isArchived) return true;
+      return allocations.some((a) => {
+        return (
+          a.projectId === project.id &&
+          a.startDate <= endOfWeekStrVal &&
+          a.endDate >= startOfWeekStrVal
+        );
+      });
+    });
+
+    const weekOrders = (projectOrders || []).filter((po) => po.weekStart === startOfWeekStrVal);
+    visibleList.sort((a, b) => {
+      const orderA = weekOrders.find((wo) => wo.projectId === a.id);
+      const orderB = weekOrders.find((wo) => wo.projectId === b.id);
+      if (orderA !== undefined && orderB !== undefined) {
+        return orderA.sortOrder - orderB.sortOrder;
+      }
+      if (orderA !== undefined) return -1;
+      if (orderB !== undefined) return 1;
+      const sortA = a.sortOrder !== undefined ? a.sortOrder : 0;
+      const sortB = b.sortOrder !== undefined ? b.sortOrder : 0;
+      if (sortA !== sortB) return sortA - sortB;
+      return a.id.localeCompare(b.id);
+    });
+
+    const [moved] = visibleList.splice(fromIdx, 1);
+    visibleList.splice(toIdx, 0, moved);
+
+    const activeSpaceId = moved.spaceId || "1";
+    const activeSpaceProjects = projects.filter((p) => p.spaceId === activeSpaceId);
+    const nonVisibleActive = activeSpaceProjects.filter((p) => !visibleList.some((vp) => vp.id === p.id));
+    const newActiveSpaceProjects = [...visibleList, ...nonVisibleActive];
+
+    const otherSpacesProjects = projects.filter((p) => p.spaceId !== activeSpaceId);
+    const finalProjectsList = [...otherSpacesProjects, ...newActiveSpaceProjects];
 
     // 1. Update React state immediately
-    onUpdateProjectsList(list);
+    onUpdateProjectsList(finalProjectsList);
 
     // 2. Persist the final order to the backend DB
-    const orderedIds = list.map((p) => p.id);
-    onSaveProjectsOrder(orderedIds);
+    const orderedIds = visibleList.map((p) => p.id);
+    onSaveProjectsOrder(orderedIds, startOfWeekStrVal);
 
     // 3. Force browser repaint after drop animation finishes (approx 200-250ms)
     // This resolves browser rendering bug in Chrome/Safari where elements stay stuck in promoted rendering layers
@@ -632,6 +670,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           {(provided) => {
             const startOfWeekStrVal = formatDateString(days[0]);
             const endOfWeekStrVal = formatDateString(days[days.length - 1]);
+            
+            // Filter visible projects
             const visibleProjects = projects.filter((project) => {
               if (!project.isArchived) return true;
               return allocations.some((a) => {
@@ -641,6 +681,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   a.endDate >= startOfWeekStrVal
                 );
               });
+            });
+
+            // Dynamically sort visible projects by the week-specific priority
+            const weekOrders = (projectOrders || []).filter((po) => po.weekStart === startOfWeekStrVal);
+            visibleProjects.sort((a, b) => {
+              const orderA = weekOrders.find((wo) => wo.projectId === a.id);
+              const orderB = weekOrders.find((wo) => wo.projectId === b.id);
+              if (orderA !== undefined && orderB !== undefined) {
+                return orderA.sortOrder - orderB.sortOrder;
+              }
+              if (orderA !== undefined) return -1;
+              if (orderB !== undefined) return 1;
+              const sortA = a.sortOrder !== undefined ? a.sortOrder : 0;
+              const sortB = b.sortOrder !== undefined ? b.sortOrder : 0;
+              if (sortA !== sortB) return sortA - sortB;
+              return a.id.localeCompare(b.id);
             });
 
             return (

@@ -98,13 +98,20 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       title TEXT
     )`);
 
+    await runQuery(`CREATE TABLE IF NOT EXISTS project_orders (
+      projectId TEXT,
+      weekStart TEXT,
+      sortOrder INTEGER,
+      PRIMARY KEY (projectId, weekStart)
+    )`);
+
     console.log('Fetching live data from production (https://allocater.radcor.pro)...');
     const response = await fetch('https://allocater.radcor.pro/api/data');
     if (!response.ok) {
       throw new Error(`Failed to fetch production data: ${response.status} ${response.statusText}`);
     }
     const prodData = await response.json();
-    const { users, projects, allocations, capacities } = prodData;
+    const { users, projects, allocations, capacities, projectOrders } = prodData;
 
     console.log('Fetching live tasks from production (https://allocater.radcor.pro)...');
     const tasksResponse = await fetch('https://allocater.radcor.pro/api/tasks/data');
@@ -119,6 +126,7 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       `- ${projects ? projects.length : 0} projects\n` +
       `- ${allocations ? allocations.length : 0} allocations\n` +
       `- ${capacities ? Object.keys(capacities).length : 0} capacities\n` +
+      `- ${projectOrders ? projectOrders.length : 0} project orders\n` +
       `- ${prodCols ? prodCols.length : 0} task columns\n` +
       `- ${prodTasks ? prodTasks.length : 0} tasks\n` +
       `- ${prodAttachs ? prodAttachs.length : 0} attachments\n` +
@@ -137,6 +145,7 @@ const db = new sqlite3.Database(dbPath, async (err) => {
     await runQuery('DELETE FROM tasks');
     await runQuery('DELETE FROM task_attachments');
     await runQuery('DELETE FROM task_links');
+    await runQuery('DELETE FROM project_orders');
     
     // 2. Insert Users
     if (users && users.length > 0) {
@@ -215,6 +224,16 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       const stmt = db.prepare('INSERT INTO task_links (id, taskId, url, title) VALUES (?, ?, ?, ?)');
       for (const l of prodLinks) {
         stmt.run(l.id, l.taskId, l.url, l.title);
+      }
+      stmt.finalize();
+    }
+
+    // 10. Insert Project Orders
+    if (projectOrders && projectOrders.length > 0) {
+      console.log('Inserting project orders...');
+      const stmt = db.prepare('INSERT INTO project_orders (projectId, weekStart, sortOrder) VALUES (?, ?, ?)');
+      for (const po of projectOrders) {
+        stmt.run(po.projectId, po.weekStart, po.sortOrder);
       }
       stmt.finalize();
     }
