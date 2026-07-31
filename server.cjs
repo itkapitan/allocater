@@ -392,15 +392,6 @@ async function saveAvatarFile(id, avatar) {
 
 // --- API Router Endpoints ---
 
-app.get('/api/test-db-migrate', async (req, res) => {
-  try {
-    const result = await executeQuery(`ALTER TABLE task_columns ADD COLUMN isProgress INTEGER DEFAULT 0`);
-    res.json({ success: true, result });
-  } catch (err) {
-    res.json({ success: false, error: err.message, stack: err.stack });
-  }
-});
-
 app.get('/api/data', async (req, res) => {
   try {
     const rawUsers = await executeQuery('SELECT * FROM users');
