@@ -803,65 +803,79 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           ) : (
                             <div style={{ position: 'relative', marginTop: '16px', paddingTop: '16px', paddingBottom: '2px' }}>
                               {/* Floating bubble showing progress */}
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  bottom: '16px',
-                                  left: `calc(${progressPercent}% - 14px)`,
-                                  backgroundColor: progressPercent === 100 ? '#00bc7c' : 'var(--primary-color)',
-                                  color: '#ffffff',
-                                  padding: '1px 5px',
-                                  borderRadius: '6px',
-                                  fontSize: '8px',
-                                  fontWeight: 800,
-                                  whiteSpace: 'nowrap',
-                                  boxShadow: progressPercent === 100 ? '0 2px 4px rgba(0, 188, 124, 0.25)' : '0 2px 4px rgba(99, 102, 241, 0.25)',
-                                  transition: 'left 0.3s ease',
-                                  zIndex: 5
-                                } as React.CSSProperties}
-                              >
-                                {progressPercent}%
-                                <div
-                                  style={{
-                                    position: 'absolute',
-                                    bottom: '-2px',
-                                    left: 'calc(50% - 2px)',
-                                    width: 0,
-                                    height: 0,
-                                    borderStyle: 'solid',
-                                    borderWidth: '2px 2px 0 2px',
-                                    borderColor: (progressPercent === 100 ? '#00bc7c' : 'var(--primary-color)') + ' transparent transparent transparent'
-                                  }}
-                                />
-                              </div>
+                              {(() => {
+                                const isDoneAll = progressPercent === 100;
+                                const isInProgressAny = progressPercent > 0 && progressPercent < 100;
 
-                              <Progress
-                                value={progressPercent}
-                                color={progressPercent === 100 ? 'teal' : 'indigo'}
-                                size="xs"
-                                radius="xl"
-                                style={{
-                                  transition: 'all 0.3s ease',
-                                  backgroundColor: '#e2e8f0'
-                                }}
-                              />
+                                const barColor = isDoneAll ? 'teal' : (isInProgressAny ? 'orange' : 'indigo');
+                                const hexColor = isDoneAll ? '#00bc7c' : (isInProgressAny ? '#f59e0b' : 'var(--primary-color)');
+                                const shadowColor = isDoneAll ? '0 2px 4px rgba(0, 188, 124, 0.25)' : (isInProgressAny ? '0 2px 4px rgba(245, 158, 11, 0.25)' : '0 2px 4px rgba(99, 102, 241, 0.25)');
+                                const haloColor = isDoneAll ? '0 0 0 1px rgba(0, 188, 124, 0.2)' : (isInProgressAny ? '0 0 0 1px rgba(245, 158, 11, 0.2)' : '0 0 0 1px rgba(99, 102, 241, 0.2)');
 
-                              {/* Target point indicator */}
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  top: '18px',
-                                  left: `calc(${progressPercent}% - 3px)`,
-                                  width: '6px',
-                                  height: '6px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#ffffff',
-                                  border: progressPercent === 100 ? '2px solid #00bc7c' : '2px solid var(--primary-color)',
-                                  boxShadow: progressPercent === 100 ? '0 0 0 1px rgba(0, 188, 124, 0.2)' : '0 0 0 1px rgba(99, 102, 241, 0.2)',
-                                  transition: 'left 0.3s ease',
-                                  zIndex: 4
-                                }}
-                              />
+                                return (
+                                  <>
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '16px',
+                                        left: `calc(${progressPercent}% - 14px)`,
+                                        backgroundColor: hexColor,
+                                        color: '#ffffff',
+                                        padding: '1px 5px',
+                                        borderRadius: '6px',
+                                        fontSize: '8px',
+                                        fontWeight: 800,
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: shadowColor,
+                                        transition: 'left 0.3s ease',
+                                        zIndex: 5
+                                      } as React.CSSProperties}
+                                    >
+                                      {progressPercent}%
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          bottom: '-2px',
+                                          left: 'calc(50% - 2px)',
+                                          width: 0,
+                                          height: 0,
+                                          borderStyle: 'solid',
+                                          borderWidth: '2px 2px 0 2px',
+                                          borderColor: hexColor + ' transparent transparent transparent'
+                                        }}
+                                      />
+                                    </div>
+
+                                    <Progress
+                                      value={progressPercent}
+                                      color={barColor}
+                                      size="xs"
+                                      radius="xl"
+                                      style={{
+                                        transition: 'all 0.3s ease',
+                                        backgroundColor: '#e2e8f0'
+                                      }}
+                                    />
+
+                                    {/* Target point indicator */}
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        top: '18px',
+                                        left: `calc(${progressPercent}% - 3px)`,
+                                        width: '6px',
+                                        height: '6px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#ffffff',
+                                        border: `2px solid ${hexColor}`,
+                                        boxShadow: haloColor,
+                                        transition: 'left 0.3s ease',
+                                        zIndex: 4
+                                      }}
+                                    />
+                                  </>
+                                );
+                              })()}
 
                               <Text size="9px" c="dimmed" mt="2px" style={{ textAlign: 'right', fontWeight: 600 }}>
                                 {doneTasksCount}/{totalTasksCount} виконано

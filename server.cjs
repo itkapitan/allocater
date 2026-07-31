@@ -179,8 +179,15 @@ async function initializeDb() {
       name TEXT,
       spaceId TEXT,
       sortOrder INTEGER,
-      isDone INTEGER DEFAULT 0
+      isDone INTEGER DEFAULT 0,
+      isProgress INTEGER DEFAULT 0
     )`);
+
+    try {
+      await executeQuery(`ALTER TABLE task_columns ADD COLUMN isProgress INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
 
     await executeQuery(`CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
@@ -996,7 +1003,8 @@ app.get('/api/tasks/data', async (req, res) => {
         name: c.name,
         spaceId: c.spaceid || c.spaceId,
         sortOrder: c.sortorder || c.sortOrder,
-        isDone: c.isdone !== undefined ? !!c.isdone : !!c.isDone
+        isDone: c.isdone !== undefined ? !!c.isdone : !!c.isDone,
+        isProgress: c.isprogress !== undefined ? !!c.isprogress : !!c.isProgress
       })),
       tasks: tasks.map(t => ({
         id: t.id,
@@ -1028,11 +1036,11 @@ app.get('/api/tasks/data', async (req, res) => {
 });
 
 app.post('/api/task-columns', async (req, res) => {
-  const { id, name, spaceId, sortOrder, isDone } = req.body;
+  const { id, name, spaceId, sortOrder, isDone, isProgress } = req.body;
   try {
     await executeQuery(
-      'INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone) VALUES (?, ?, ?, ?, ?)',
-      [id, name, spaceId, sortOrder, isDone ? 1 : 0]
+      'INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone, isProgress) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, name, spaceId, sortOrder, isDone ? 1 : 0, isProgress ? 1 : 0]
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -1042,7 +1050,7 @@ app.post('/api/task-columns', async (req, res) => {
 
 app.put('/api/task-columns/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, sortOrder, isDone } = req.body;
+  const { name, sortOrder, isDone, isProgress } = req.body;
   try {
     let query = 'UPDATE task_columns SET ';
     const params = [];
@@ -1057,6 +1065,10 @@ app.put('/api/task-columns/:id', async (req, res) => {
     if (isDone !== undefined) {
       query += 'isDone = ?, ';
       params.push(isDone ? 1 : 0);
+    }
+    if (isProgress !== undefined) {
+      query += 'isProgress = ?, ';
+      params.push(isProgress ? 1 : 0);
     }
     query = query.slice(0, -2) + ' WHERE id = ?';
     params.push(id);

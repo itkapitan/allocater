@@ -1250,7 +1250,7 @@ export const App: React.FC = () => {
   };
 
   // --- Tasks Handlers ---
-  const handleAddColumn = (name: string, isDone: boolean) => {
+  const handleAddColumn = (name: string, isDone: boolean, isProgress: boolean) => {
     if (!isAdmin) return;
     const colId = `col-${Date.now()}`;
     const sortOrder = columns.filter((c) => c.spaceId === activeSpaceId).length;
@@ -1260,6 +1260,7 @@ export const App: React.FC = () => {
       spaceId: activeSpaceId,
       sortOrder,
       isDone,
+      isProgress,
     };
     setColumns((prev) => [...prev, newCol]);
 
@@ -1272,7 +1273,7 @@ export const App: React.FC = () => {
 
   const handleUpdateColumn = (
     colId: string,
-    updated: { name?: string; isDone?: boolean; sortOrder?: number },
+    updated: { name?: string; isDone?: boolean; isProgress?: boolean; sortOrder?: number },
   ) => {
     if (!isAdmin) return;
     setColumns((prev) =>

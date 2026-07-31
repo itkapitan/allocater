@@ -60,7 +60,8 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       name TEXT,
       spaceId TEXT,
       sortOrder INTEGER,
-      isDone INTEGER DEFAULT 0
+      isDone INTEGER DEFAULT 0,
+      isProgress INTEGER DEFAULT 0
     )`);
 
     await runQuery(`CREATE TABLE IF NOT EXISTS tasks (
@@ -172,9 +173,9 @@ const db = new sqlite3.Database(dbPath, async (err) => {
     // 6. Insert Columns
     if (prodCols && prodCols.length > 0) {
       console.log('Inserting columns...');
-      const stmt = db.prepare('INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone) VALUES (?, ?, ?, ?, ?)');
+      const stmt = db.prepare('INSERT INTO task_columns (id, name, spaceId, sortOrder, isDone, isProgress) VALUES (?, ?, ?, ?, ?, ?)');
       for (const c of prodCols) {
-        stmt.run(c.id, c.name, c.spaceId, c.sortOrder || 0, c.isDone ? 1 : 0);
+        stmt.run(c.id, c.name, c.spaceId, c.sortOrder || 0, c.isDone ? 1 : 0, c.isProgress ? 1 : 0);
       }
       stmt.finalize();
     }

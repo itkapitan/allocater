@@ -60,7 +60,7 @@ interface TaskTrackerProps {
   attachments: any[];
   links: any[];
   weekDays: Date[];
-  onAddColumn: (name: string, isDone: boolean) => void;
+  onAddColumn: (name: string, isDone: boolean, isProgress: boolean) => void;
   onUpdateColumn: (colId: string, updated: any) => void;
   onDeleteColumn: (colId: string) => void;
   onAddCard: (cardData: { title: string; description: string; projectId: string; designerId: string | null; columnId: string }) => void;
@@ -151,6 +151,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   // Draft form states
   const [newColName, setNewColName] = useState('');
   const [newColIsDone, setNewColIsDone] = useState(false);
+  const [newColIsProgress, setNewColIsProgress] = useState(false);
   
   const [newProjName, setNewProjName] = useState('');
   const [newProjColor, setNewProjColor] = useState('#6366f1');
@@ -1234,7 +1235,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                                 onClick={() => {
                                   setEditingColumn(col);
                                   setNewColName(col.name);
-                                  setNewColIsDone(col.isDone === 1);
+                                  setNewColIsDone(!!col.isDone);
+                                  setNewColIsProgress(!!col.isProgress);
                                   setEditColumnModalOpened(true);
                                 }}
                               >
@@ -1431,6 +1433,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   onClick={() => {
                     setNewColName('');
                     setNewColIsDone(false);
+                    setNewColIsProgress(false);
                     setNewColumnModalOpened(true);
                   }}
                   style={{
@@ -1471,12 +1474,33 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
           <Checkbox
             checked={newColIsDone}
-            onChange={(e) => setNewColIsDone(e.currentTarget.checked)}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsDone(checked);
+              if (checked) setNewColIsProgress(false);
+            }}
             label={
               <div>
                 <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
                 <Text size="xs" c="dimmed">
                   Карточки, перенесені в цю колонку, будуть вважатися виконаними та просунуть прогрес-бар проєкту.
+                </Text>
+              </div>
+            }
+          />
+
+          <Checkbox
+            checked={newColIsProgress}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsProgress(checked);
+              if (checked) setNewColIsDone(false);
+            }}
+            label={
+              <div>
+                <Text fw={600} size="sm">Позначити як в процесі (isProgress)</Text>
+                <Text size="xs" c="dimmed">
+                  Карточки в цій колонці будуть вважатися виконаними наполовину (50%) для прогрес-бару проєкту.
                 </Text>
               </div>
             }
@@ -1490,7 +1514,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
               color="indigo"
               onClick={() => {
                 if (newColName.trim()) {
-                  onAddColumn(newColName.trim(), newColIsDone);
+                  onAddColumn(newColName.trim(), newColIsDone, newColIsProgress);
                   setNewColumnModalOpened(false);
                 }
               }}
@@ -1519,12 +1543,33 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
 
           <Checkbox
             checked={newColIsDone}
-            onChange={(e) => setNewColIsDone(e.currentTarget.checked)}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsDone(checked);
+              if (checked) setNewColIsProgress(false);
+            }}
             label={
               <div>
                 <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
                 <Text size="xs" c="dimmed">
                   Карточки в цій колонці є завершеними задачами проєкту.
+                </Text>
+              </div>
+            }
+          />
+
+          <Checkbox
+            checked={newColIsProgress}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsProgress(checked);
+              if (checked) setNewColIsDone(false);
+            }}
+            label={
+              <div>
+                <Text fw={600} size="sm">Позначити як в процесі (isProgress)</Text>
+                <Text size="xs" c="dimmed">
+                  Карточки в цій колонці є задачами в процесі виконання (50% прогресу).
                 </Text>
               </div>
             }
@@ -1540,7 +1585,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                 if (editingColumn && newColName.trim()) {
                   onUpdateColumn(editingColumn.id, {
                     name: newColName.trim(),
-                    isDone: newColIsDone
+                    isDone: newColIsDone,
+                    isProgress: newColIsProgress
                   });
                   setEditColumnModalOpened(false);
                 }
