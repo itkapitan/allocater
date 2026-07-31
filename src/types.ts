@@ -14,6 +14,8 @@ export interface Project {
   memberIds: string[]; // list of user ids in this project
   spaceId?: string;
   isArchived?: boolean;
+  taskNumber?: string;
+  figmaLink?: string;
 }
 
 export interface Allocation {

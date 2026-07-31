@@ -6,7 +6,14 @@ import type { User, Project } from '../types';
 interface AddProjectRowProps {
   users: User[];
   projects: Project[];
-  onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
+  onAddProject: (
+    name: string,
+    color: string,
+    memberIds: string[],
+    existingProjectId?: string,
+    taskNumber?: string,
+    figmaLink?: string
+  ) => void;
 }
 
 const resolveProjectColor = (color: string | undefined): string => {
@@ -27,6 +34,8 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
   const [selectedProjectId, setSelectedProjectId] = useState<string>('new');
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
+  const [taskNumber, setTaskNumber] = useState('');
+  const [figmaLink, setFigmaLink] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   const handleMemberToggle = (userId: string) => {
@@ -42,12 +51,16 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
       setName('');
       setSelectedMembers([]);
       setColor('#6366f1');
+      setTaskNumber('');
+      setFigmaLink('');
     } else {
       const existingProject = projects.find((p) => p.id === value);
       if (existingProject) {
         setName(existingProject.name);
         setSelectedMembers(existingProject.memberIds || []);
         setColor(resolveProjectColor(existingProject.color));
+        setTaskNumber(existingProject.taskNumber || '');
+        setFigmaLink(existingProject.figmaLink || '');
       }
     }
   };
@@ -55,13 +68,15 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
   const handleSave = () => {
     if (!name.trim()) return;
     if (selectedProjectId === 'new') {
-      onAddProject(name.trim(), color, selectedMembers);
+      onAddProject(name.trim(), color, selectedMembers, undefined, taskNumber.trim(), figmaLink.trim());
     } else {
-      onAddProject(name.trim(), color, selectedMembers, selectedProjectId);
+      onAddProject(name.trim(), color, selectedMembers, selectedProjectId, taskNumber.trim(), figmaLink.trim());
     }
     setName('');
     setSelectedMembers([]);
     setColor('#6366f1');
+    setTaskNumber('');
+    setFigmaLink('');
     setSelectedProjectId('new');
     setIsExpanded(false);
   };
@@ -149,14 +164,36 @@ export const AddProjectRow: React.FC<AddProjectRowProps> = ({ users, projects, o
           />
         )}
 
-        <ColorInput
-          label="Колір проєкту"
-          value={color}
-          onChange={setColor}
-          swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
-          required
-          radius="md"
-        />
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px', minWidth: '150px' }}>
+            <ColorInput
+              label="Колір проєкту"
+              value={color}
+              onChange={setColor}
+              swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
+              required
+              radius="md"
+            />
+          </div>
+          <div style={{ flex: '1 1 200px', minWidth: '150px' }}>
+            <TextInput
+              label="Номер задачі"
+              placeholder="Наприклад: 12345"
+              value={taskNumber}
+              onChange={(e) => setTaskNumber(e.currentTarget.value)}
+              radius="md"
+            />
+          </div>
+          <div style={{ flex: '1 1 200px', minWidth: '150px' }}>
+            <TextInput
+              label="Посилання на макет"
+              placeholder="Посилання на Figma"
+              value={figmaLink}
+              onChange={(e) => setFigmaLink(e.currentTarget.value)}
+              radius="md"
+            />
+          </div>
+        </div>
 
         <div>
           <Text fw={600} size="sm" mb="xs" style={{ fontFamily: 'var(--font-family)' }}>Команда проєкту</Text>

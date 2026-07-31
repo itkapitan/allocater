@@ -1170,6 +1170,8 @@ export const App: React.FC = () => {
     color: string,
     memberIds: string[],
     existingProjectId?: string,
+    taskNumber?: string,
+    figmaLink?: string,
   ) => {
     if (!isAdmin) return;
 
@@ -1184,6 +1186,8 @@ export const App: React.FC = () => {
                 name: name.trim() || p.name,
                 color: color || p.color,
                 memberIds,
+                taskNumber: taskNumber !== undefined ? taskNumber.trim() : p.taskNumber,
+                figmaLink: figmaLink !== undefined ? figmaLink.trim() : p.figmaLink,
               }
             : p,
         ),
@@ -1197,6 +1201,8 @@ export const App: React.FC = () => {
           name: name.trim(),
           color,
           memberIds,
+          taskNumber: taskNumber !== undefined ? taskNumber.trim() : undefined,
+          figmaLink: figmaLink !== undefined ? figmaLink.trim() : undefined,
         }),
       }).catch((err) =>
         console.error("Error updating project in SQLite:", err),
@@ -1216,14 +1222,27 @@ export const App: React.FC = () => {
       setProjects((prev) =>
         prev.map((p) =>
           p.id === existing.id
-            ? { ...p, isArchived: false, color: color || p.color, memberIds }
+            ? { 
+                ...p, 
+                isArchived: false, 
+                color: color || p.color, 
+                memberIds,
+                taskNumber: taskNumber !== undefined ? taskNumber.trim() : p.taskNumber,
+                figmaLink: figmaLink !== undefined ? figmaLink.trim() : p.figmaLink,
+              }
             : p,
         ),
       );
       fetch(`/api/projects/${existing.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isArchived: false, color, memberIds }),
+        body: JSON.stringify({ 
+          isArchived: false, 
+          color, 
+          memberIds,
+          taskNumber: taskNumber !== undefined ? taskNumber.trim() : undefined,
+          figmaLink: figmaLink !== undefined ? figmaLink.trim() : undefined,
+        }),
       }).catch((err) =>
         console.error("Error unarchiving project in SQLite:", err),
       );
@@ -1239,6 +1258,8 @@ export const App: React.FC = () => {
       memberIds,
       spaceId: activeSpaceId,
       isArchived: false,
+      taskNumber: taskNumber ? taskNumber.trim() : '',
+      figmaLink: figmaLink ? figmaLink.trim() : '',
     };
     setProjects((prev) => [...prev, newProj]);
 
@@ -1699,6 +1720,7 @@ export const App: React.FC = () => {
                 loading={loading}
                 columns={columns}
                 tasks={filteredTasksForActiveWeek}
+                onAddProject={handleAddProject}
               />
 
               {/* Add Project Bar - Hidden if not Admin */}

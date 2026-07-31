@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress, TextInput } from '@mantine/core';
-import { IconUserPlus, IconTrash, IconDotsVertical, IconSearch } from '@tabler/icons-react';
+import { Menu, ActionIcon, Button, Text, Avatar, Modal, Stack, Group, Tooltip, Skeleton, Progress, TextInput, ColorInput, Checkbox, Divider } from '@mantine/core';
+import { IconUserPlus, IconTrash, IconDotsVertical, IconSearch, IconPencil, IconBrandFigma, IconCopy, IconNotebook } from '@tabler/icons-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { User, Project, Allocation } from '../types';
 import { AllocationBar } from './AllocationBar';
@@ -84,6 +84,14 @@ interface CalendarGridProps {
   loading?: boolean;
   columns?: any[];
   tasks?: any[];
+  onAddProject?: (
+    name: string,
+    color: string,
+    memberIds: string[],
+    existingProjectId?: string,
+    taskNumber?: string,
+    figmaLink?: string
+  ) => void;
 }
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -106,6 +114,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   loading = false,
   columns = [],
   tasks = [],
+  onAddProject,
 }) => {
   // Drag selection state
   const [selectionBox, setSelectionBox] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
@@ -113,6 +122,55 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
   const selectionStartRef = useRef<{ x: number; y: number; projectId: string; dayIdx: number } | null>(null);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
+
+  // Project editing modal states
+  const [editProjectModalOpened, setEditProjectModalOpened] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjName, setEditProjName] = useState('');
+  const [editProjColor, setEditProjColor] = useState('#6366f1');
+  const [editProjTaskNumber, setEditProjTaskNumber] = useState('');
+  const [editProjFigmaLink, setEditProjFigmaLink] = useState('');
+  const [editProjMembers, setEditProjMembers] = useState<string[]>([]);
+
+  const resolveProjectColor = (color: string | undefined): string => {
+    if (!color) return '#6366f1';
+    const mapping: Record<string, string> = {
+      indigo: '#6366f1',
+      blue: '#3b82f6',
+      teal: '#0d9488',
+      emerald: '#10b981',
+      orange: '#f59e0b',
+      rose: '#f43f5e',
+    };
+    return mapping[color.toLowerCase()] || color;
+  };
+
+  const handleStartEditProject = (project: Project) => {
+    setEditingProject(project);
+    setEditProjName(project.name);
+    setEditProjColor(project.color || '#6366f1');
+    setEditProjTaskNumber(project.taskNumber || '');
+    setEditProjFigmaLink(project.figmaLink || '');
+    setEditProjMembers(project.memberIds || []);
+    setEditProjectModalOpened(true);
+  };
+
+  const handleEditProjectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProjName.trim() || !editingProject) return;
+    if (onAddProject) {
+      onAddProject(
+        editProjName.trim(),
+        editProjColor,
+        editProjMembers,
+        editingProject.id,
+        editProjTaskNumber.trim(),
+        editProjFigmaLink.trim()
+      );
+    }
+    setEditProjectModalOpened(false);
+    setEditingProject(null);
+  };
 
   // Formatter helper
   const formatDateString = (date: Date) => {
@@ -563,7 +621,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         className={`project-row ${snapshot.isDragging ? 'is-dragging' : ''}`}
                       >
                         {/* Left Cell: Project Name & Members */}
-                        <div className="project-info-cell">
+                        <div className="project-info-cell" style={{ position: 'relative' }}>
+                          {/* Color Badge Capsule */}
+                          <div 
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '5px',
+                              height: '60px',
+                              borderRadius: '9px',
+                              backgroundColor: resolveProjectColor(project.color),
+                              zIndex: 10,
+                            }}
+                          />
+
                           <div className="project-title-container" style={{ display: 'flex', alignItems: 'center' }}>
                             <span
                               {...draggableProvided.dragHandleProps}
@@ -612,6 +685,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 <Menu.Dropdown>
                                   <Menu.Label>Керування проєктом</Menu.Label>
                                   <Menu.Item
+                                    leftSection={<IconPencil size={14} />}
+                                    onClick={() => handleStartEditProject(project)}
+                                  >
+                                    Редагувати проєкт
+                                  </Menu.Item>
+                                  <Menu.Item
                                     color="red"
                                     leftSection={<IconTrash size={14} />}
                                     onClick={() => {
@@ -624,6 +703,64 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                               </Menu>
                             )}
                           </div>
+
+                          {/* Project Metadata: Task Number and Figma Link */}
+                          {(project.taskNumber || project.figmaLink) && (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '-8px' }}>
+                              {project.taskNumber && (
+                                <Group gap={2} align="center" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && handleStartEditProject(project)}>
+                                  <Text size="11px" c="dimmed" style={{ display: 'inline-flex', alignItems: 'center', fontWeight: 500 }}>
+                                    #{project.taskNumber}
+                                  </Text>
+                                  <Tooltip label="Копіювати номер">
+                                    <ActionIcon
+                                      variant="subtle"
+                                      color="gray"
+                                      size="xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(project.taskNumber || '');
+                                      }}
+                                    >
+                                      <IconCopy size={11} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                </Group>
+                              )}
+                              {project.figmaLink && (
+                                <Group gap={2} align="center">
+                                  <Tooltip label="Відкрити макет Figma">
+                                    <Button
+                                      variant="light"
+                                      color="orange"
+                                      size="xs"
+                                      leftSection={<IconBrandFigma size={10} />}
+                                      style={{ height: '20px', padding: '0 6px', fontSize: '9px' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (project.figmaLink) window.open(project.figmaLink, '_blank');
+                                      }}
+                                    >
+                                      Figma
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip label="Копіювати посилання">
+                                    <ActionIcon
+                                      variant="subtle"
+                                      color="gray"
+                                      size="xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (project.figmaLink) navigator.clipboard.writeText(project.figmaLink);
+                                      }}
+                                    >
+                                      <IconCopy size={11} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                </Group>
+                              )}
+                            </div>
+                          )}
 
                           {/* Member List */}
                           <div className="project-members" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '8px' }}>
@@ -1002,6 +1139,107 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      {/* Edit Project Modal */}
+      <Modal
+        opened={editProjectModalOpened}
+        onClose={() => {
+          setEditProjectModalOpened(false);
+          setEditingProject(null);
+        }}
+        title={
+          <Group gap="xs">
+            <IconNotebook size={20} color="var(--primary-color)" />
+            <Text fw={800} size="md">Редагування проєкту</Text>
+          </Group>
+        }
+        centered
+        radius="md"
+        size="lg"
+      >
+        {editingProject && (
+          <form onSubmit={handleEditProjectSubmit}>
+            <Stack gap="md">
+              <TextInput
+                label="Назва проєкту"
+                placeholder="Введіть назву"
+                value={editProjName}
+                onChange={(e) => setEditProjName(e.currentTarget.value)}
+                required
+              />
+
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                  <ColorInput
+                    label="Колір проєкту"
+                    value={editProjColor}
+                    onChange={setEditProjColor}
+                    swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
+                    required
+                  />
+                </div>
+                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                  <TextInput
+                    label="Номер задачі"
+                    placeholder="Наприклад: 12345"
+                    value={editProjTaskNumber}
+                    onChange={(e) => setEditProjTaskNumber(e.currentTarget.value)}
+                  />
+                </div>
+                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                  <TextInput
+                    label="Посилання на макет"
+                    placeholder="Figma посилання"
+                    value={editProjFigmaLink}
+                    onChange={(e) => setEditProjFigmaLink(e.currentTarget.value)}
+                  />
+                </div>
+              </div>
+
+              <Divider my="xs" label="УЧАСНИКИ ПРОЄКТУ" labelPosition="center" />
+              <Text size="xs" c="dimmed">
+                Виберіть дизайнерів, які будуть задіяні на цьому проєкті:
+              </Text>
+
+              <Stack gap="xs" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                {users.filter(u => u.isDesigner).map((user) => {
+                  const isSelected = editProjMembers.includes(user.id);
+                  return (
+                    <Checkbox
+                      key={user.id}
+                      label={user.name}
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.currentTarget.checked) {
+                          setEditProjMembers((prev) => [...prev, user.id]);
+                        } else {
+                          setEditProjMembers((prev) => prev.filter((id) => id !== user.id));
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </Stack>
+
+              <Group justify="flex-end" gap="xs" mt="md">
+                <Button 
+                  variant="subtle" 
+                  color="gray" 
+                  onClick={() => {
+                    setEditProjectModalOpened(false);
+                    setEditingProject(null);
+                  }}
+                >
+                  Скасувати
+                </Button>
+                <Button type="submit" color="indigo">
+                  Зберегти зміни
+                </Button>
+              </Group>
+            </Stack>
+          </form>
+        )}
       </Modal>
     </div>
   );

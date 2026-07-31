@@ -70,7 +70,14 @@ interface TaskTrackerProps {
   onDeleteAttachment: (attachId: string) => void;
   onAddLink: (taskId: string, url: string, title: string) => void;
   onDeleteLink: (linkId: string) => void;
-  onAddProject: (name: string, color: string, memberIds: string[], existingProjectId?: string) => void;
+  onAddProject: (
+    name: string,
+    color: string,
+    memberIds: string[],
+    existingProjectId?: string,
+    taskNumber?: string,
+    figmaLink?: string
+  ) => void;
   loading?: boolean;
   onPrevWeek: () => void;
   onNextWeek: () => void;
@@ -155,6 +162,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
   
   const [newProjName, setNewProjName] = useState('');
   const [newProjColor, setNewProjColor] = useState('#6366f1');
+  const [newProjTaskNumber, setNewProjTaskNumber] = useState('');
+  const [newProjFigmaLink, setNewProjFigmaLink] = useState('');
   const [newProjMembers, setNewProjMembers] = useState<string[]>([]);
 
   // Task details editing draft
@@ -928,6 +937,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     setNewProjName(project.name);
     setNewProjColor(project.color || '#6366f1');
     setNewProjMembers(project.memberIds || []);
+    setNewProjTaskNumber(project.taskNumber || '');
+    setNewProjFigmaLink(project.figmaLink || '');
     setNewProjectModalOpened(true);
   };
 
@@ -937,15 +948,17 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
     if (!newProjName.trim()) return;
 
     if (editingProject) {
-      onAddProject(newProjName.trim(), newProjColor, newProjMembers, editingProject.id);
+      onAddProject(newProjName.trim(), newProjColor, newProjMembers, editingProject.id, newProjTaskNumber.trim(), newProjFigmaLink.trim());
     } else {
-      onAddProject(newProjName.trim(), newProjColor, newProjMembers);
+      onAddProject(newProjName.trim(), newProjColor, newProjMembers, undefined, newProjTaskNumber.trim(), newProjFigmaLink.trim());
     }
     setNewProjectModalOpened(false);
     setEditingProject(null);
     setNewProjName('');
     setNewProjColor('#6366f1');
     setNewProjMembers([]);
+    setNewProjTaskNumber('');
+    setNewProjFigmaLink('');
   };
 
   const formatSprintRange = (start: Date, end: Date) => {
@@ -2010,6 +2023,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           setNewProjName('');
           setNewProjColor('#6366f1');
           setNewProjMembers([]);
+          setNewProjTaskNumber('');
+          setNewProjFigmaLink('');
         }}
         title={
           <Group gap="xs">
@@ -2021,6 +2036,7 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
         }
         centered
         radius="md"
+        size="lg"
       >
         <form onSubmit={handleCreateProjectSubmit}>
           <Stack gap="md">
@@ -2032,13 +2048,33 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
               required
             />
 
-            <ColorInput
-              label="Колір проєкту"
-              value={newProjColor}
-              onChange={setNewProjColor}
-              swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
-              required
-            />
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                <ColorInput
+                  label="Колір проєкту"
+                  value={newProjColor}
+                  onChange={setNewProjColor}
+                  swatches={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#8b5cf6']}
+                  required
+                />
+              </div>
+              <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                <TextInput
+                  label="Номер задачі"
+                  placeholder="Наприклад: 12345"
+                  value={newProjTaskNumber}
+                  onChange={(e) => setNewProjTaskNumber(e.currentTarget.value)}
+                />
+              </div>
+              <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+                <TextInput
+                  label="Посилання на макет"
+                  placeholder="Figma посилання"
+                  value={newProjFigmaLink}
+                  onChange={(e) => setNewProjFigmaLink(e.currentTarget.value)}
+                />
+              </div>
+            </div>
 
             <Divider my="xs" label="УЧАСНИКИ ПРОЄКТУ" labelPosition="center" />
             <Text size="xs" c="dimmed">
@@ -2075,6 +2111,8 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                   setNewProjName('');
                   setNewProjColor('#6366f1');
                   setNewProjMembers([]);
+                  setNewProjTaskNumber('');
+                  setNewProjFigmaLink('');
                 }}
               >
                 Скасувати

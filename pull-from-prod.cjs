@@ -30,10 +30,18 @@ const db = new sqlite3.Database(dbPath, async (err) => {
       name TEXT,
       color TEXT,
       memberIds TEXT,
-      sortOrder INTEGER DEFAULT 0
+      sortOrder INTEGER DEFAULT 0,
+      taskNumber TEXT,
+      figmaLink TEXT
     )`);
     try {
       await runQuery(`ALTER TABLE projects ADD COLUMN sortOrder INTEGER DEFAULT 0`);
+    } catch (e) {}
+    try {
+      await runQuery(`ALTER TABLE projects ADD COLUMN taskNumber TEXT`);
+    } catch (e) {}
+    try {
+      await runQuery(`ALTER TABLE projects ADD COLUMN figmaLink TEXT`);
     } catch (e) {}
 
     await runQuery(`CREATE TABLE IF NOT EXISTS allocations (
@@ -143,9 +151,9 @@ const db = new sqlite3.Database(dbPath, async (err) => {
     // 3. Insert Projects
     if (projects && projects.length > 0) {
       console.log('Inserting projects...');
-      const stmt = db.prepare('INSERT INTO projects (id, name, color, memberIds, sortOrder) VALUES (?, ?, ?, ?, ?)');
+      const stmt = db.prepare('INSERT INTO projects (id, name, color, memberIds, sortOrder, taskNumber, figmaLink) VALUES (?, ?, ?, ?, ?, ?, ?)');
       for (const p of projects) {
-        stmt.run(p.id, p.name, p.color, JSON.stringify(p.memberIds || []), p.sortOrder || 0);
+        stmt.run(p.id, p.name, p.color, JSON.stringify(p.memberIds || []), p.sortOrder || 0, p.taskNumber || '', p.figmaLink || '');
       }
       stmt.finalize();
     }

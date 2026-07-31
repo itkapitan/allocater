@@ -119,7 +119,11 @@ async function initializeDb() {
       name TEXT,
       color TEXT,
       memberIds TEXT,
-      sortOrder INTEGER DEFAULT 0
+      sortOrder INTEGER DEFAULT 0,
+      spaceId TEXT,
+      isArchived INTEGER DEFAULT 0,
+      taskNumber TEXT,
+      figmaLink TEXT
     )`);
 
     try {
@@ -136,6 +140,18 @@ async function initializeDb() {
 
     try {
       await executeQuery(`ALTER TABLE projects ADD COLUMN isArchived INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
+
+    try {
+      await executeQuery(`ALTER TABLE projects ADD COLUMN taskNumber TEXT`);
+    } catch (e) {
+      // Ignored if column already exists
+    }
+
+    try {
+      await executeQuery(`ALTER TABLE projects ADD COLUMN figmaLink TEXT`);
     } catch (e) {
       // Ignored if column already exists
     }
@@ -410,7 +426,9 @@ app.get('/api/data', async (req, res) => {
       ...p,
       memberIds: JSON.parse(p.memberids || p.memberIds || '[]'),
       spaceId: p.spaceid || p.spaceId || '1',
-      isArchived: !!p.isarchived || !!p.isArchived
+      isArchived: !!p.isarchived || !!p.isArchived,
+      taskNumber: p.tasknumber !== undefined ? p.tasknumber : p.taskNumber || '',
+      figmaLink: p.figmalink !== undefined ? p.figmalink : p.figmaLink || ''
     }));
 
     const spaces = rawSpaces.map((s) => ({
@@ -774,7 +792,7 @@ app.post('/api/tasks/import-json', async (req, res) => {
 
 // Project CRUD
 app.post('/api/projects', async (req, res) => {
-  const { id, name, color, memberIds, spaceId } = req.body;
+  const { id, name, color, memberIds, spaceId, taskNumber, figmaLink } = req.body;
   try {
     const maxRow = await executeQuery('SELECT MAX(sortOrder) as maxSort FROM projects');
     let maxSort = 0;
@@ -787,8 +805,8 @@ app.post('/api/projects', async (req, res) => {
     const newSortOrder = maxSort + 1;
 
     await executeQuery(
-      'INSERT INTO projects (id, name, color, memberIds, sortOrder, spaceId, isArchived) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, name, color, JSON.stringify(memberIds), newSortOrder, spaceId || '1', 0]
+      'INSERT INTO projects (id, name, color, memberIds, sortOrder, spaceId, isArchived, taskNumber, figmaLink) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name, color, JSON.stringify(memberIds), newSortOrder, spaceId || '1', 0, taskNumber || '', figmaLink || '']
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -879,7 +897,7 @@ app.put('/api/projects/order', async (req, res) => {
 
 app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
-    const { name, color, memberIds, isArchived } = req.body;
+    const { name, color, memberIds, isArchived, taskNumber, figmaLink } = req.body;
     try {
       let query = 'UPDATE projects SET ';
       const params = [];
@@ -899,6 +917,14 @@ app.put('/api/projects/:id', async (req, res) => {
       if (isArchived !== undefined) {
         query += 'isArchived = ?, ';
         params.push(isArchived ? 1 : 0);
+      }
+      if (taskNumber !== undefined) {
+        query += 'taskNumber = ?, ';
+        params.push(taskNumber);
+      }
+      if (figmaLink !== undefined) {
+        query += 'figmaLink = ?, ';
+        params.push(figmaLink);
       }
     
     query = query.slice(0, -2) + ' WHERE id = ?';
