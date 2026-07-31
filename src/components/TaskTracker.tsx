@@ -1473,23 +1473,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           />
 
           <Checkbox
-            checked={newColIsDone}
-            onChange={(e) => {
-              const checked = e.currentTarget.checked;
-              setNewColIsDone(checked);
-              if (checked) setNewColIsProgress(false);
-            }}
-            label={
-              <div>
-                <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
-                <Text size="xs" c="dimmed">
-                  Карточки, перенесені в цю колонку, будуть вважатися виконаними та просунуть прогрес-бар проєкту.
-                </Text>
-              </div>
-            }
-          />
-
-          <Checkbox
             checked={newColIsProgress}
             onChange={(e) => {
               const checked = e.currentTarget.checked;
@@ -1501,6 +1484,23 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                 <Text fw={600} size="sm">Позначити як в процесі (isProgress)</Text>
                 <Text size="xs" c="dimmed">
                   Карточки в цій колонці будуть вважатися виконаними наполовину (50%) для прогрес-бару проєкту.
+                </Text>
+              </div>
+            }
+          />
+
+          <Checkbox
+            checked={newColIsDone}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsDone(checked);
+              if (checked) setNewColIsProgress(false);
+            }}
+            label={
+              <div>
+                <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
+                <Text size="xs" c="dimmed">
+                  Карточки, перенесені в цю колонку, будуть вважатися виконаними та просунуть прогрес-бар проєкту.
                 </Text>
               </div>
             }
@@ -1542,23 +1542,6 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
           />
 
           <Checkbox
-            checked={newColIsDone}
-            onChange={(e) => {
-              const checked = e.currentTarget.checked;
-              setNewColIsDone(checked);
-              if (checked) setNewColIsProgress(false);
-            }}
-            label={
-              <div>
-                <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
-                <Text size="xs" c="dimmed">
-                  Карточки в цій колонці є завершеними задачами проєкту.
-                </Text>
-              </div>
-            }
-          />
-
-          <Checkbox
             checked={newColIsProgress}
             onChange={(e) => {
               const checked = e.currentTarget.checked;
@@ -1570,6 +1553,23 @@ export const TaskTracker: React.FC<TaskTrackerProps> = ({
                 <Text fw={600} size="sm">Позначити як в процесі (isProgress)</Text>
                 <Text size="xs" c="dimmed">
                   Карточки в цій колонці є задачами в процесі виконання (50% прогресу).
+                </Text>
+              </div>
+            }
+          />
+
+          <Checkbox
+            checked={newColIsDone}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setNewColIsDone(checked);
+              if (checked) setNewColIsProgress(false);
+            }}
+            label={
+              <div>
+                <Text fw={600} size="sm">Позначити як Виконано (isDone)</Text>
+                <Text size="xs" c="dimmed">
+                  Карточки в цій колонці є завершеними задачами проєкту.
                 </Text>
               </div>
             }
