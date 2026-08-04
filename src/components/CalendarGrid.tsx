@@ -788,14 +788,27 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           (col) => col.isDone === 1 || col.isDone === true,
                         )
                         .map((col) => col.id);
-                      const doneTasks = projectTasks.filter((t) =>
+                      const progressColumnIds = columns
+                        .filter(
+                          (col) => col.isProgress === 1 || col.isProgress === true,
+                        )
+                        .map((col) => col.id);
+
+                      const doneTasksCount = projectTasks.filter((t) =>
                         doneColumnIds.includes(t.columnId),
-                      );
+                      ).length;
+                      const progressTasksCount = projectTasks.filter((t) =>
+                        progressColumnIds.includes(t.columnId),
+                      ).length;
+
                       const totalTasksCount = projectTasks.length;
-                      const doneTasksCount = doneTasks.length;
                       const progressPercent =
                         totalTasksCount > 0
-                          ? Math.round((doneTasksCount / totalTasksCount) * 100)
+                          ? Math.round(
+                              ((doneTasksCount + progressTasksCount * 0.5) /
+                                totalTasksCount) *
+                                100,
+                            )
                           : 0;
 
                       // Compute lanes for this project
